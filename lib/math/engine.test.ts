@@ -150,6 +150,35 @@ describe("angle modes", () => {
   });
 });
 
+describe("matrices, lists and distributions", () => {
+  it("does matrix arithmetic", () => {
+    const scope = createScope();
+    evalOk("A = [1, 2; 3, 4]", scope);
+    expect(evalOk("det(A)", scope).display).toBe("-2");
+    expect(evalOk("inv(A)", scope).display).toBe("[[-2, 1], [1.5, -0.5]]");
+    expect(evalOk("A * [1; 1]", scope).tex).toBe("\\begin{bmatrix}3\\\\7\\end{bmatrix}");
+  });
+
+  it("shows one-dimensional lists as a row", () => {
+    expect(evalOk("[1, 2, 3] * 2").tex).toBe("\\begin{bmatrix}2 & 4 & 6\\end{bmatrix}");
+  });
+
+  it("runs statistics on lists", () => {
+    const scope = createScope();
+    scope.set("L1", [2, 4, 4, 4, 5, 5, 7, 9]);
+    expect(evalOk("mean(L1)", scope).display).toBe("5");
+    expect(evalOk("std(L1, 'uncorrected')", scope).display).toBe("2");
+  });
+
+  it("provides calculator-style distribution functions", () => {
+    expect(evalOk("normalcdf(-1, 1)").display).toBe("0.682689492137");
+    expect(evalOk("invNorm(0.975)").display).toBe("1.95996398454");
+    expect(evalOk("binompdf(10, 0.5, 5)").display).toBe("0.24609375");
+    expect(evalOk("poissoncdf(3, 2)").display).toBe("0.423190081127");
+    expect(evaluateExpression("invNorm(2)", createScope()).ok).toBe(false);
+  });
+});
+
 describe("expressionToTex", () => {
   it("renders TeX for valid input and null for incomplete input", () => {
     expect(expressionToTex("sqrt(x)")?.replace(/\s/g, "")).toBe("\\sqrt{x}");

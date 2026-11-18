@@ -45,14 +45,12 @@ export function ValueTable({ curves, angleMode, traceX, onSelectX }: ValueTableP
     "w-24 rounded-md border border-zinc-300 bg-zinc-50 px-2 py-1 font-mono text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-950";
 
   return (
-    <section
-      aria-labelledby="table-heading"
-      className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-    >
+    <div aria-labelledby="table-heading">
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h2 id="table-heading" className="mr-auto text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+        <h2 id="table-heading" className="sr-only">
           Table of values
         </h2>
+        <span className="mr-auto" />
         <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           Start
           <input
@@ -126,6 +124,6 @@ export function ValueTable({ curves, angleMode, traceX, onSelectX }: ValueTableP
         </div>
       )}
       <p className="mt-2 text-xs text-zinc-500">Click a row to move the trace point to that x.</p>
-    </section>
+    </div>
   );
 }

@@ -28,6 +28,22 @@ import {
 import { ExpressionInput } from "./ExpressionInput";
 import { toExactForm } from "@/lib/math/exact";
 import { ValueTable } from "@/components/graph/ValueTable";
+import { MatrixPanel } from "@/components/tools/MatrixPanel";
+import { StatsPanel } from "@/components/tools/StatsPanel";
+import { ToolsPanel } from "@/components/tools/ToolsPanel";
+import {
+  DATA_KEY,
+  MATRICES_KEY,
+  WORKSPACE_VARIABLES,
+  loadData,
+  loadMatrices,
+  workspaceVariables,
+  writeJson,
+  type DataLists,
+  type Matrices,
+} from "@/lib/calculator/workspace";
+import type { Point } from "@/lib/graph/sample";
+import { parseList } from "@/lib/stats/stats";
 import { HistoryPanel } from "./HistoryPanel";
 import { Keypad } from "./Keypad";
 
@@ -60,7 +76,14 @@ function loadInitialState() {
   for (const [i, text] of (shared.equations ?? DEFAULT_EQUATIONS).entries()) {
     equations.push(createEquation(`e${i + 1}`, text, equations));
   }
-  return { angleMode, displayMode, equations, history: loadHistory(storage) };
+  return {
+    angleMode,
+    displayMode,
+    equations,
+    history: loadHistory(storage),
+    data: loadData(storage),
+    matrices: loadMatrices(storage),
+  };
 }
 
 function readSetting(storage: Storage | undefined, key: string): string | null {
@@ -94,10 +117,19 @@ export function Calculator() {
   use(browser("Reads saved history, settings and shared graph equations from this browser."));
   const [initial] = useState(loadInitialState);
 
-  const scopeRef = useRef<Scope>(createScope());
+  // The calculator scope starts with the saved data lists (L1, L2) and matrices.
+  const [initialScope] = useState<Scope>(() => {
+    const scope = createScope();
+    for (const [name, value] of workspaceVariables(initial.data, initial.matrices)) scope.set(name, value);
+    return scope;
+  });
+  const scopeRef = useRef<Scope>(initialScope);
   // Copy of the scope for the graph, replaced after each evaluation so curves
   // recompile when variables or functions change.
-  const [graphScope, setGraphScope] = useState<Scope>(() => createScope());
+  const [graphScope, setGraphScope] = useState<Scope>(() => new Map(initialScope));
+  const [data, setData] = useState<DataLists>(initial.data);
+  const [matrices, setMatrices] = useState<Matrices>(initial.matrices);
+  const [plotData, setPlotData] = useState(false);
   const [angleMode, setAngleMode] = useState<AngleMode>(initial.angleMode);
 
   const inputs = useRef(new Map<string, HTMLInputElement>());
@@ -143,8 +175,14 @@ export function Calculator() {
       else if (spec.kind === "inequality") shapes.push({ id: eq.id, color: eq.color, kind: "inequality", fn: spec.fn, op: spec.op });
       else shapes.push({ id: eq.id, color: eq.color, kind: "curve", xy: spec.xy, tMin: spec.tMin, tMax: spec.tMax });
     });
+    if (plotData) {
+      const xs = parseList(data.l1).values;
+      const ys = parseList(data.l2).values;
+      const points = xs.slice(0, ys.length).map((x, i): Point => [x, ys[i]]);
+      if (points.length) shapes.push({ id: "data", color: "var(--mafs-orange)", kind: "points", points });
+    }
     return { curves, shapes };
-  }, [equations, compiled]);
+  }, [equations, compiled, plotData, data]);
 
   // Keep the URL shareable and remember settings and history.
   useEffect(() => {
@@ -156,6 +194,18 @@ export function Calculator() {
   useEffect(() => writeSetting(DISPLAY_KEY, displayMode), [displayMode]);
 
   useEffect(() => saveHistory(safeLocalStorage(), history), [history]);
+  useEffect(() => writeJson(safeLocalStorage(), DATA_KEY, data), [data]);
+  useEffect(() => writeJson(safeLocalStorage(), MATRICES_KEY, matrices), [matrices]);
+
+  /** Replaces the data lists and matrices, and the variables they define. */
+  function updateWorkspace(nextData: DataLists, nextMatrices: Matrices) {
+    setData(nextData);
+    setMatrices(nextMatrices);
+    const scope = scopeRef.current;
+    for (const name of WORKSPACE_VARIABLES) scope.delete(name);
+    for (const [name, value] of workspaceVariables(nextData, nextMatrices)) scope.set(name, value);
+    setGraphScope(new Map(scope));
+  }
 
   // ----- Editing -----
 
@@ -182,13 +232,24 @@ export function Calculator() {
     else dispatchEquation(activeField, action);
   }
 
-  function addEquation() {
-    if (equations.length >= MAX_EQUATIONS) return;
+  /** Inserts text at the expression cursor and focuses the expression input. */
+  function insertIntoExpression(text: string) {
+    setActiveField(EXPRESSION_FIELD);
+    dispatchExpression({ type: "insert", text });
+    inputs.current.get(EXPRESSION_FIELD)?.focus();
+  }
+
+  /** Adds an equation row; an empty one is focused for typing. Returns false at the limit. */
+  function addEquation(text = ""): boolean {
+    if (equations.length >= MAX_EQUATIONS) return false;
     const id = `e${nextEquationId.current++}`;
-    setEquations((eqs) => [...eqs, createEquation(id, "", eqs)]);
-    setActiveField(id);
-    // Focus once the new input has mounted.
-    requestAnimationFrame(() => inputs.current.get(id)?.focus());
+    setEquations((eqs) => [...eqs, createEquation(id, text, eqs)]);
+    if (!text) {
+      setActiveField(id);
+      // Focus once the new input has mounted.
+      requestAnimationFrame(() => inputs.current.get(id)?.focus());
+    }
+    return true;
   }
 
   function removeEquation(id: string) {
@@ -412,7 +473,7 @@ export function Calculator() {
           onFocus={setActiveField}
           onToggleVisible={toggleEquation}
           onRemove={removeEquation}
-          onAdd={addEquation}
+          onAdd={() => addEquation()}
         />
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-600 dark:text-zinc-400">
@@ -498,24 +559,60 @@ export function Calculator() {
         <HistoryPanel
           entries={history}
           onUseExpression={(text) => focusExpression(text)}
-          onInsertResult={(text) => {
-            setActiveField(EXPRESSION_FIELD);
-            dispatchExpression({ type: "insert", text });
-            inputs.current.get(EXPRESSION_FIELD)?.focus();
-          }}
+          onInsertResult={insertIntoExpression}
           onClear={() => setHistory([])}
         />
       </div>
 
       <div className="lg:self-start">
-        <ValueTable
-          curves={curves}
-          angleMode={angleMode}
-          traceX={traceId ? traceX : null}
-          onSelectX={(x) => {
-            setTraceX(x);
-            if (!traceId && curves.length > 0) setTraceId(curves[0].id);
-          }}
+        <ToolsPanel
+          tabs={[
+            {
+              id: "table",
+              label: "Table",
+              content: (
+                <ValueTable
+                  curves={curves}
+                  angleMode={angleMode}
+                  traceX={traceId ? traceX : null}
+                  onSelectX={(x) => {
+                    setTraceX(x);
+                    if (!traceId && curves.length > 0) setTraceId(curves[0].id);
+                  }}
+                />
+              ),
+            },
+            {
+              id: "stats",
+              label: "Statistics",
+              content: (
+                <StatsPanel
+                  data={data}
+                  onDataChange={(next) => updateWorkspace(next, matrices)}
+                  plotData={plotData}
+                  onPlotDataChange={setPlotData}
+                  onGraphFit={(fitExpression) =>
+                    addEquation(fitExpression) ? null : `Remove an equation first (the limit is ${MAX_EQUATIONS})`
+                  }
+                />
+              ),
+            },
+            {
+              id: "matrices",
+              label: "Matrices",
+              content: (
+                <MatrixPanel
+                  matrices={matrices}
+                  onSave={(name, matrix) => updateWorkspace(data, { ...matrices, [name]: matrix })}
+                  onDelete={(name) => {
+                    const rest = Object.fromEntries(Object.entries(matrices).filter(([key]) => key !== name));
+                    updateWorkspace(data, rest);
+                  }}
+                  onInsert={insertIntoExpression}
+                />
+              ),
+            },
+          ]}
         />
       </div>
     </div>
