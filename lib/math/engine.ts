@@ -1,7 +1,11 @@
 import { all, create, type MathJsInstance } from "mathjs";
 import { DISTRIBUTIONS } from "@/lib/stats/distributions";
 
-export type AngleMode = "rad" | "deg";
+export type AngleMode = "rad" | "deg" | "grad";
+
+/** Size of a half turn in each angle unit. */
+export const HALF_TURN: Record<AngleMode, number> = { rad: Math.PI, deg: 180, grad: 200 };
+const ANGLE_SYMBOL: Record<AngleMode, string> = { rad: " rad", deg: "°", grad: " grad" };
 
 type Engine = {
   math: MathJsInstance;
@@ -14,41 +18,42 @@ const disabled = (name: string) => () => {
 
 /** Results smaller than this from trig functions of non-tiny inputs are rounding noise (sin(pi)). */
 const TRIG_NOISE = 1e-15;
-const DEG = Math.PI / 180;
 
 const snapNoise = (result: number, input: number) =>
   Math.abs(result) < TRIG_NOISE && Math.abs(input) > 1e-6 ? 0 : result;
 
-/** True when `degrees` is an exact multiple of `step` plus `offset`. */
-const isMultiple = (degrees: number, step: number, offset = 0) => Number.isInteger((degrees - offset) / step);
+/** True when `angle` is an exact multiple of `step` plus `offset`. */
+const isMultiple = (angle: number, step: number, offset = 0) => Number.isInteger((angle - offset) / step);
 
 /**
- * Trig functions for the given angle mode. In degree mode, real-number inputs
- * to sin/cos/tan are read as degrees and inverse functions return degrees.
- * Non-number inputs (units such as `30 deg`, complex numbers) go to Math.js
- * unchanged. Exact zeros (sin 180°, cos 90°, sin π) are returned as 0 rather
- * than floating-point noise, and tan at an odd multiple of 90° is an error.
+ * Trig functions for the given angle mode. In degree and gradian modes,
+ * real-number inputs to sin/cos/tan are read in that unit and inverse
+ * functions return it. Non-number inputs (units such as `30 deg`, complex
+ * numbers) go to Math.js unchanged. Exact zeros (sin 180°, cos 100 grad,
+ * sin π) are returned as 0 rather than floating-point noise, and tan at an
+ * odd multiple of a quarter turn is an error.
  */
 function trigFunctions(math: MathJsInstance, mode: AngleMode) {
   const { sin, cos, tan, asin, acos, atan, atan2, asec, acsc, acot } = math;
-  const isDeg = mode === "deg";
-  const toRad = (x: number) => (isDeg ? x * DEG : x);
-  const fromRad = (value: unknown) => (isDeg && typeof value === "number" ? value / DEG : value);
+  const half = HALF_TURN[mode];
+  const exact = mode !== "rad"; // multiples of a quarter turn are exact numbers
+  const toRad = (x: number) => (x * Math.PI) / half;
+  const fromRad = (value: unknown) => (exact && typeof value === "number" ? (value * half) / Math.PI : value);
 
   const wrappedSin = (x: unknown) => {
     if (typeof x !== "number") return sin(x as number);
-    if (isDeg && isMultiple(x, 180)) return 0;
+    if (exact && isMultiple(x, half)) return 0;
     return snapNoise(Math.sin(toRad(x)), x);
   };
   const wrappedCos = (x: unknown) => {
     if (typeof x !== "number") return cos(x as number);
-    if (isDeg && isMultiple(x, 180, 90)) return 0;
+    if (exact && isMultiple(x, half, half / 2)) return 0;
     return snapNoise(Math.cos(toRad(x)), x);
   };
   const wrappedTan = (x: unknown) => {
     if (typeof x !== "number") return tan(x as number);
-    if (isDeg && isMultiple(x, 180)) return 0;
-    if (isDeg && isMultiple(x, 180, 90)) throw new Error(`tan is undefined at ${x}°`);
+    if (exact && isMultiple(x, half)) return 0;
+    if (exact && isMultiple(x, half, half / 2)) throw new Error(`tan is undefined at ${x}${ANGLE_SYMBOL[mode]}`);
     return snapNoise(Math.tan(toRad(x)), x);
   };
 
@@ -78,6 +83,12 @@ function trigFunctions(math: MathJsInstance, mode: AngleMode) {
 function buildEngine(mode: AngleMode): Engine {
   const math = create(all, { number: "number", precision: 64 });
   const parse = math.parse;
+  // Common units Math.js lacks; createUnit is disabled for expressions below.
+  math.createUnit({
+    cal: { definition: "4.184 J", prefixes: "short" },
+    knot: { definition: "1852 m/hour", aliases: ["knots"] },
+    nmi: { definition: "1852 m", aliases: ["nauticalMile"] },
+  });
   math.import(
     {
       ...trigFunctions(math, mode),
@@ -209,6 +220,11 @@ export function compileIn(source: string, variable: string, scope: Scope, angleM
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/** Converts `value` from one unit to another, e.g. (5, "inch", "cm") → 12.7. Throws on unknown or incompatible units. */
+export function convertUnits(value: number, from: string, to: string): number {
+  return getEngine("rad").math.unit(value, from).toNumber(to);
 }
 
 function isResultSet(value: unknown): value is { entries: unknown[] } {

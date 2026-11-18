@@ -16,10 +16,16 @@ import { TracePoint } from "./TracePoint";
 type ViewBox = { x: [number, number]; y: [number, number] };
 
 const DEFAULT_VIEW: ViewBox = { x: [-10, 10], y: [-6, 6] };
+const TRIG_VIEW_LABEL: Record<AngleMode, string> = {
+  deg: "Show x from -360° to 360°",
+  rad: "Show x from -2π to 2π",
+  grad: "Show x from -400 to 400 grad",
+};
 /** One full cycle either side of 0, like a handheld calculator's trig zoom. */
 const TRIG_VIEW: Record<AngleMode, ViewBox> = {
   deg: { x: [-360, 360], y: [-2, 2] },
   rad: { x: [-2 * Math.PI, 2 * Math.PI], y: [-2, 2] },
+  grad: { x: [-400, 400], y: [-2, 2] },
 };
 
 /** A y = f(x) curve. Only these support trace, key points and the value table. */
@@ -128,7 +134,7 @@ export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoi
       <div className="absolute top-2 right-2 flex gap-1">
         <ViewButton
           onClick={() => showView(TRIG_VIEW[angleMode])}
-          title={angleMode === "deg" ? "Show x from -360° to 360°" : "Show x from -2π to 2π"}
+          title={TRIG_VIEW_LABEL[angleMode]}
         >
           Trig view
         </ViewButton>

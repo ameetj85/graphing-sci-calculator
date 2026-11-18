@@ -31,6 +31,8 @@ import { ValueTable } from "@/components/graph/ValueTable";
 import { MatrixPanel } from "@/components/tools/MatrixPanel";
 import { StatsPanel } from "@/components/tools/StatsPanel";
 import { ToolsPanel } from "@/components/tools/ToolsPanel";
+import { UnitsPanel } from "@/components/tools/UnitsPanel";
+import { VariablesPanel } from "@/components/tools/VariablesPanel";
 import {
   DATA_KEY,
   MATRICES_KEY,
@@ -55,6 +57,8 @@ const DEFAULT_EQUATIONS = ["sin(x)"];
 
 type DisplayMode = "exact" | "decimal";
 
+const ANGLE_NAMES: Record<AngleMode, string> = { deg: "degrees", rad: "radians", grad: "gradians" };
+
 type Selection = { start: number; end: number };
 
 function safeLocalStorage(): Storage | undefined {
@@ -69,7 +73,8 @@ function safeLocalStorage(): Storage | undefined {
 function loadInitialState() {
   const storage = safeLocalStorage();
   const shared = decodeShareState(window.location.search);
-  const angleMode: AngleMode = shared.angleMode ?? (readSetting(storage, ANGLE_KEY) === "deg" ? "deg" : "rad");
+  const savedAngle = readSetting(storage, ANGLE_KEY);
+  const angleMode: AngleMode = shared.angleMode ?? (savedAngle === "deg" || savedAngle === "grad" ? savedAngle : "rad");
   const displayMode: DisplayMode = readSetting(storage, DISPLAY_KEY) === "decimal" ? "decimal" : "exact";
 
   const equations: Equation[] = [];
@@ -283,6 +288,12 @@ export function Calculator() {
     }
   }
 
+  /** Deletes a user variable or function from the calculator scope. */
+  function deleteVariable(name: string) {
+    scopeRef.current.delete(name);
+    setGraphScope(new Map(scopeRef.current));
+  }
+
   /** Deletes the calculator variable `x`, which the graph cannot use anyway. */
   function removeCalculatorX() {
     scopeRef.current.delete("x");
@@ -390,6 +401,7 @@ export function Calculator() {
                 options={[
                   { value: "deg", label: "DEG" },
                   { value: "rad", label: "RAD" },
+                  { value: "grad", label: "GRAD" },
                 ]}
                 value={angleMode}
                 onChange={setAngleMode}
@@ -501,7 +513,7 @@ export function Calculator() {
             />
             Roots &amp; intersections
           </label>
-          <span className="text-xs text-zinc-400">{angleMode === "deg" ? "x in degrees" : "x in radians"}</span>
+          <span className="text-xs text-zinc-400">x in {ANGLE_NAMES[angleMode]}</span>
           <button
             type="button"
             onClick={copyLink}
@@ -611,6 +623,16 @@ export function Calculator() {
                   onInsert={insertIntoExpression}
                 />
               ),
+            },
+            {
+              id: "units",
+              label: "Units",
+              content: <UnitsPanel onInsert={insertIntoExpression} />,
+            },
+            {
+              id: "variables",
+              label: "Variables",
+              content: <VariablesPanel scope={graphScope} onInsert={insertIntoExpression} onDelete={deleteVariable} />,
             },
           ]}
         />

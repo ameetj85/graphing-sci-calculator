@@ -138,6 +138,21 @@ describe("angle modes", () => {
     expect(fn.ok && fn.fn(270)).toBeNaN();
   });
 
+  it("supports gradians (400 per turn)", () => {
+    const grad = (expr: string) => {
+      const result = evaluateExpression(expr, createScope(), "grad");
+      if (!result.ok) throw new Error(result.error);
+      return result.display;
+    };
+    expect(grad("sin(100)")).toBe("1");
+    expect(grad("cos(200)")).toBe("-1");
+    expect(grad("sin(200)")).toBe("0");
+    expect(grad("cos(100)")).toBe("0");
+    expect(grad("tan(50)")).toBe("1");
+    expect(grad("asin(1)")).toBe("100");
+    expect(evaluateExpression("tan(100)", createScope(), "grad").ok).toBe(false);
+  });
+
   it("still honors explicit units in degree mode", () => {
     expect(evalOk("sin(30 deg)").display).toBe("0.5");
     // Implicit multiplication binds tighter than division: `pi/2 rad` is pi / (2 rad).

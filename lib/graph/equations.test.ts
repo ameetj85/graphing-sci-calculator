@@ -19,6 +19,13 @@ describe("share URL state", () => {
     expect(decodeShareState(`?${query}`)).toEqual({ equations: ["sin(x)", "x^2 + 1"], angleMode: "deg" });
   });
 
+  it("round-trips gradian mode", () => {
+    expect(decodeShareState(encodeShareState({ equations: ["x"], angleMode: "grad" }))).toEqual({
+      equations: ["x"],
+      angleMode: "grad",
+    });
+  });
+
   it("omits the default radian mode", () => {
     expect(encodeShareState({ equations: ["x"], angleMode: "rad" })).toBe("eq=x");
   });
@@ -26,7 +33,7 @@ describe("share URL state", () => {
   it("drops invalid values and caps the equation count", () => {
     const many = Array.from({ length: 10 }, (_, i) => `eq=x%2B${i}`).join("&");
     expect(decodeShareState(many).equations).toHaveLength(MAX_EQUATIONS);
-    expect(decodeShareState(`eq=${"x".repeat(500)}&angle=grad`)).toEqual({});
+    expect(decodeShareState(`eq=${"x".repeat(500)}&angle=turns`)).toEqual({});
     expect(decodeShareState("")).toEqual({});
   });
 });
