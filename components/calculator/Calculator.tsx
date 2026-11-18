@@ -5,6 +5,8 @@ import { use, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState }
 import { Tex } from "@/components/Tex";
 import { EquationList } from "@/components/graph/EquationList";
 import { Graph, type GraphCurve, type GraphShape } from "@/components/graph/Graph";
+import { SurfaceView, type GraphSurface } from "@/components/graph/SurfaceView";
+import { snapshotScope } from "@/lib/graph/scopeSnapshot";
 import { compilePlot, type PlotResult } from "@/lib/graph/plotSpec";
 import { EMPTY_EDITOR, editorReducer, type EditorAction, type EditorState } from "@/lib/calculator/editor";
 import { addHistoryEntry, loadHistory, saveHistory, type HistoryEntry } from "@/lib/calculator/history";
@@ -16,6 +18,7 @@ import {
   encodeShareState,
   equationName,
   type Equation,
+  type GraphView,
 } from "@/lib/graph/equations";
 import {
   createScope,
@@ -87,6 +90,7 @@ function loadInitialState() {
   }
   return {
     angleMode,
+    view: shared.view ?? "2d",
     displayMode,
     equations,
     history: loadHistory(storage),
@@ -143,6 +147,7 @@ export function Calculator() {
   const [matrices, setMatrices] = useState<Matrices>(initial.matrices);
   const [plotData, setPlotData] = useState(false);
   const [angleMode, setAngleMode] = useState<AngleMode>(initial.angleMode);
+  const [view, setView] = useState<GraphView>(initial.view);
   const [programs, setPrograms] = useState<Program[]>(initial.programs);
 
   const inputs = useRef(new Map<string, HTMLInputElement>());
@@ -172,6 +177,9 @@ export function Calculator() {
   const previewTex = useMemo(() => expressionToTex(expression.value), [expression.value]);
   const exactForm = useMemo(() => (result?.ok ? toExactForm(result.value) : null), [result]);
 
+  // Plain-data copy of the scope for the plotting worker.
+  const snapshot = useMemo(() => snapshotScope(graphScope), [graphScope]);
+
   const compiled = useMemo(() => {
     const byId: Record<string, PlotResult> = {};
     for (const eq of equations) byId[eq.id] = compilePlot(eq.text, graphScope, angleMode);
@@ -179,15 +187,18 @@ export function Calculator() {
   }, [equations, graphScope, angleMode]);
 
   // y = f(x) curves (traceable, tabulated) and other shapes, visible ones only.
-  const { curves, shapes } = useMemo(() => {
+  const { curves, shapes, surfaces } = useMemo(() => {
     const curves: GraphCurve[] = [];
     const shapes: GraphShape[] = [];
+    const surfaces: GraphSurface[] = [];
     equations.forEach((eq, index) => {
       const result = compiled[eq.id];
       if (!eq.visible || !result.ok) return;
       const { spec } = result;
       if (spec.kind === "function") curves.push({ id: eq.id, name: equationName(index), fn: spec.fn, color: eq.color });
       else if (spec.kind === "inequality") shapes.push({ id: eq.id, color: eq.color, kind: "inequality", fn: spec.fn, op: spec.op });
+      else if (spec.kind === "implicit") shapes.push({ id: eq.id, color: eq.color, kind: "implicit", source: spec.source });
+      else if (spec.kind === "surface") surfaces.push({ id: eq.id, name: equationName(index), source: spec.source, color: eq.color });
       else shapes.push({ id: eq.id, color: eq.color, kind: "curve", xy: spec.xy, tMin: spec.tMin, tMax: spec.tMax });
     });
     if (plotData) {
@@ -196,14 +207,14 @@ export function Calculator() {
       const points = xs.slice(0, ys.length).map((x, i): Point => [x, ys[i]]);
       if (points.length) shapes.push({ id: "data", color: "var(--mafs-orange)", kind: "points", points });
     }
-    return { curves, shapes };
+    return { curves, shapes, surfaces };
   }, [equations, compiled, plotData, data]);
 
   // Keep the URL shareable and remember settings and history.
   useEffect(() => {
-    const query = encodeShareState({ equations: equations.map((eq) => eq.text), angleMode });
+    const query = encodeShareState({ equations: equations.map((eq) => eq.text), angleMode, view });
     window.history.replaceState(window.history.state, "", query ? `?${query}` : window.location.pathname);
-  }, [equations, angleMode]);
+  }, [equations, angleMode, view]);
 
   useEffect(() => writeSetting(ANGLE_KEY, angleMode), [angleMode]);
   useEffect(() => writeSetting(DISPLAY_KEY, displayMode), [displayMode]);
@@ -443,7 +454,7 @@ export function Calculator() {
   return (
     // Two rows on wide screens: calculator | graph, then history | value table.
     // The graph card stretches to the calculator card's height.
-    <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+    <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
         <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm lg:self-start dark:border-zinc-800 dark:bg-zinc-900">
           <form
             onSubmit={(event) => {
@@ -556,33 +567,48 @@ export function Calculator() {
           onToggleVisible={toggleEquation}
           onRemove={removeEquation}
           onAdd={() => addEquation()}
+          view={view}
+          onShow3D={() => setView("3d")}
         />
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-600 dark:text-zinc-400">
-          <label className="flex items-center gap-2">
-            Trace
-            <select
-              value={traceId ?? ""}
-              onChange={(event) => setTraceId(event.target.value || null)}
-              className="rounded-md border border-zinc-300 bg-white px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
-            >
-              <option value="">Off</option>
-              {curves.map((curve) => (
-                <option key={curve.id} value={curve.id}>
-                  {curve.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={showKeyPoints}
-              onChange={(event) => setShowKeyPoints(event.target.checked)}
-              className="size-4 accent-blue-600"
-            />
-            Roots &amp; intersections
-          </label>
+          <Segmented
+            label="Graph view"
+            options={[
+              { value: "2d", label: "2D" },
+              { value: "3d", label: "3D" },
+            ]}
+            value={view}
+            onChange={setView}
+          />
+          {view === "2d" && (
+            <>
+              <label className="flex items-center gap-2">
+                Trace
+                <select
+                  value={traceId ?? ""}
+                  onChange={(event) => setTraceId(event.target.value || null)}
+                  className="rounded-md border border-zinc-300 bg-white px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950"
+                >
+                  <option value="">Off</option>
+                  {curves.map((curve) => (
+                    <option key={curve.id} value={curve.id}>
+                      {curve.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={showKeyPoints}
+                  onChange={(event) => setShowKeyPoints(event.target.checked)}
+                  className="size-4 accent-blue-600"
+                />
+                Roots &amp; intersections
+              </label>
+            </>
+          )}
           <span className="text-xs text-zinc-400">x in {ANGLE_NAMES[angleMode]}</span>
           <button
             type="button"
@@ -621,18 +647,30 @@ export function Calculator() {
         {/* The graph fills whatever height is left, measured by Graph itself. */}
         <div className="relative min-h-[22rem] flex-1">
           <div className="absolute inset-0">
-            <Graph
-              curves={curves}
-              shapes={shapes}
-              traceId={traceId}
-              traceX={traceX}
-              onTraceMove={setTraceX}
-              showKeyPoints={showKeyPoints}
-              angleMode={angleMode}
-            />
+            {view === "3d" ? (
+              <SurfaceView
+                key={angleMode}
+                surfaces={surfaces}
+                scope={graphScope}
+                snapshot={snapshot}
+                angleMode={angleMode}
+              />
+            ) : (
+              <Graph
+                curves={curves}
+                shapes={shapes}
+                traceId={traceId}
+                traceX={traceX}
+                onTraceMove={setTraceX}
+                showKeyPoints={showKeyPoints}
+                angleMode={angleMode}
+                scope={graphScope}
+                snapshot={snapshot}
+              />
+            )}
           </div>
         </div>
-        {showKeyPoints && curves.length > 0 && (
+        {view === "2d" && showKeyPoints && curves.length > 0 && (
           <p className="text-xs text-zinc-500">Hover a dot to see a root or intersection; click it to pin its coordinates.</p>
         )}
       </section>

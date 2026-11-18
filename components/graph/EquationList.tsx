@@ -17,6 +17,9 @@ type EquationListProps = {
   onToggleVisible: (id: string) => void;
   onRemove: (id: string) => void;
   onAdd: () => void;
+  /** Which graph view is showing; surfaces are drawn only in 3D. */
+  view: "2d" | "3d";
+  onShow3D: () => void;
 };
 
 export function EquationList({
@@ -30,6 +33,8 @@ export function EquationList({
   onToggleVisible,
   onRemove,
   onAdd,
+  view,
+  onShow3D,
 }: EquationListProps) {
   return (
     <div className="flex flex-col gap-2">
@@ -40,12 +45,21 @@ export function EquationList({
           const error = equation.text.trim() && result && !result.ok ? result.error : null;
           const spec = result?.ok ? result.spec : null;
           const variable = spec?.kind === "polar" && spec.rangeLabel.startsWith("θ") ? "theta" : "t";
-          const hint =
-            spec && (spec.kind === "polar" || spec.kind === "parametric")
-              ? `${spec.kind === "polar" ? "Polar" : "Parametric"}, ${spec.rangeLabel}. End with {-5 <= ${variable} <= 5} to change the range.`
-              : spec?.kind === "inequality"
-                ? `Shaded inequality${spec.op === "<" || spec.op === ">" ? " (dashed edge: not included)" : ""}`
-                : null;
+          const hint = !spec
+            ? null
+            : spec.kind === "surface"
+              ? view === "3d"
+                ? "3D surface"
+                : "3D surface, drawn in the 3D view"
+              : view === "3d"
+                ? "Drawn in the 2D view"
+                : spec.kind === "polar" || spec.kind === "parametric"
+                  ? `${spec.kind === "polar" ? "Polar" : "Parametric"}, ${spec.rangeLabel}. End with {-5 <= ${variable} <= 5} to change the range.`
+                  : spec.kind === "inequality"
+                    ? `Shaded inequality${spec.op === "<" || spec.op === ">" ? " (dashed edge: not included)" : ""}`
+                    : spec.kind === "implicit"
+                      ? "Implicit curve"
+                      : null;
           return (
             <li key={equation.id}>
               <div
@@ -79,7 +93,7 @@ export function EquationList({
                   dispatch={dispatchFor(equation.id)}
                   registerInput={(element) => registerInput(equation.id, element)}
                   onFocus={() => onFocus(equation.id)}
-                  placeholder="x^2,  y > x,  r = 2sin(3theta),  (cos(t), sin(t))"
+                  placeholder="x^2,  y > x,  x^2 + y^2 = 4,  z = sin(x) cos(y)"
                   className={equation.visible ? "" : "opacity-60"}
                 />
                 <button
@@ -93,7 +107,19 @@ export function EquationList({
                 </button>
               </div>
               {error && <p className="mt-0.5 ml-14 text-xs text-red-600 dark:text-red-400">{error}</p>}
-              {!error && hint && <p className="mt-0.5 ml-14 text-xs text-zinc-500">{hint}</p>}
+              {!error && hint && (
+                <p className="mt-0.5 ml-14 text-xs text-zinc-500">
+                  {hint}
+                  {spec?.kind === "surface" && view === "2d" && (
+                    <>
+                      {" "}
+                      <button type="button" onClick={onShow3D} className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+                        Show 3D view
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
             </li>
           );
         })}

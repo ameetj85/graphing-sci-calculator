@@ -6,11 +6,22 @@
  *   y > x^2, x^2 <= y     shaded inequality
  *   r = 2 sin(3 theta)    polar curve (theta, θ or t)
  *   (cos(t), sin(t))      parametric curve
+ *   x^2 + y^2 = 4         implicit curve (traced in the plotting worker)
+ *   z = sin(x) cos(y)     3D surface (shown in the 3D view)
  *
  * Polar and parametric curves may end with a range such as {0 <= t <= 4pi};
  * otherwise t (or θ) runs over one full turn in the current angle mode.
  */
-import { HALF_TURN, compileFunction, compileIn, evaluateExpression, type AngleMode, type Scope } from "@/lib/math/engine";
+import {
+  HALF_TURN,
+  compileFunction,
+  compileIn,
+  compileInVariables,
+  evaluateExpression,
+  isBuiltInName,
+  type AngleMode,
+  type Scope,
+} from "@/lib/math/engine";
 import { toExactForm } from "@/lib/math/exact";
 import { formatCoordinate } from "./keyPoints";
 import type { Point } from "./sample";
@@ -28,7 +39,11 @@ export type PlotSpec =
       tex: string;
       /** e.g. "θ from 0 to 2π" */
       rangeLabel: string;
-    };
+    }
+  /** F(x, y) = 0, traced off the main thread. `source` is F. */
+  | { kind: "implicit"; source: string; tex: string }
+  /** z = f(x, y). `source` is f. */
+  | { kind: "surface"; source: string; tex: string };
 
 export type PlotResult = { ok: true; spec: PlotSpec } | { ok: false; error: string };
 
@@ -59,6 +74,31 @@ export function splitTopLevel(source: string): string[] {
   parts.push(source.slice(start));
   return parts.map((p) => p.trim());
 }
+
+/**
+ * Splits an equation at its single top-level "=" (not part of ==, <=, >= or
+ * !=, and not inside brackets). Returns null if there isn't exactly one.
+ */
+export function splitEquation(source: string): [string, string] | null {
+  let depth = 0;
+  let at = -1;
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") depth--;
+    else if (c === "=" && depth === 0) {
+      const before = source[i - 1];
+      const after = source[i + 1];
+      if (after === "=" || before === "=" || before === "<" || before === ">" || before === "!") continue;
+      if (at !== -1) return null;
+      at = i;
+    }
+  }
+  if (at === -1) return null;
+  return [source.slice(0, at).trim(), source.slice(at + 1).trim()];
+}
+
+const FUNCTION_DEFINITION = /^([A-Za-z_]\w*)\s*\([^()]*\)$/;
 
 /** If the whole text is wrapped in one pair of parentheses, returns the inside. */
 function unwrapParens(source: string): string | null {
@@ -157,6 +197,32 @@ export function compilePlot(text: string, scope: Scope, angleMode: AngleMode): P
   }
 
   if (range) return { ok: false, error: "A {…} range applies to polar r = … and parametric (x(t), y(t)) curves" };
+
+  const equation = splitEquation(body);
+  if (equation) {
+    const [lhs, rhs] = equation;
+    if (!lhs || !rhs) return { ok: false, error: "Write an expression on both sides of =" };
+    if (lhs === "z") {
+      const f = compileInVariables(rhs, ["x", "y"], scope, angleMode);
+      if (!f.ok) return f;
+      return { ok: true, spec: { kind: "surface", source: rhs, tex: `z = ${f.tex}` } };
+    }
+    const definition = lhs.match(FUNCTION_DEFINITION);
+    if (definition && !scope.has(definition[1]) && !isBuiltInName(definition[1])) {
+      return {
+        ok: false,
+        error: `Define ${definition[1]} in the Expression input, then graph it here as ${definition[1]}(x)`,
+      };
+    }
+    // y = f(x) stays an ordinary function (traceable, tabulated).
+    if (!(lhs === "y" && !/\by\b/.test(rhs))) {
+      const left = compileInVariables(lhs, ["x", "y"], scope, angleMode);
+      if (!left.ok) return left;
+      const right = compileInVariables(rhs, ["x", "y"], scope, angleMode);
+      if (!right.ok) return right;
+      return { ok: true, spec: { kind: "implicit", source: `(${lhs}) - (${rhs})`, tex: `${left.tex} = ${right.tex}` } };
+    }
+  }
 
   const yFirst = body.match(Y_FIRST);
   const yLast = yFirst ? null : body.match(Y_LAST);

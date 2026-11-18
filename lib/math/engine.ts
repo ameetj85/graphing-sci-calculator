@@ -146,6 +146,7 @@ export function evaluateExpression(expr: string, scope: Scope, angleMode: AngleM
   try {
     const node = getEngine(angleMode).parse(source);
     let value = node.compile().evaluate(scope);
+    recordDefinitions(node, scope, angleMode);
     // Multiple statements (`r = 2; pi r^2`) return a ResultSet; show the last
     // visible result. A trailing `;` hides a statement's result.
     if (isResultSet(value)) value = value.entries.at(-1);
@@ -182,19 +183,41 @@ export function compileFunction(expr: string, scope: Scope, angleMode: AngleMode
  * expression alone.
  */
 export function compileIn(source: string, variable: string, scope: Scope, angleMode: AngleMode = "rad"): CompileResult {
-  if (!source.trim()) return { ok: false, error: `Enter an expression in ${variable}` };
+  const result = compileInVariables(source, [variable], scope, angleMode);
+  if (!result.ok) return result;
+  const { fn, tex } = result;
+  return { ok: true, fn: (value) => fn(value), tex };
+}
+
+export type MultiFunction = (...values: number[]) => number;
+
+export type MultiCompileResult = { ok: true; fn: MultiFunction; tex: string } | { ok: false; error: string };
+
+/**
+ * Compiles an expression in several variables, such as f(x, y) for a
+ * surface. Same rules as compileIn: other symbols must be built-in or in
+ * `scope`, and the function yields NaN where the result is not a real number.
+ */
+export function compileInVariables(
+  source: string,
+  variables: string[],
+  scope: Scope,
+  angleMode: AngleMode = "rad",
+): MultiCompileResult {
+  const names = variables.join(" and ");
+  if (!source.trim()) return { ok: false, error: `Enter an expression in ${names}` };
   try {
     const { math, parse } = getEngine(angleMode);
     const node = parse(source);
     if (node.type === "AssignmentNode" || node.type === "FunctionAssignmentNode") {
-      return { ok: false, error: `Enter an expression in ${variable}, such as ${variable}^2 - 1` };
+      return { ok: false, error: `Enter an expression in ${names}, such as ${variables.map((v) => `${v}^2`).join(" + ")} - 1` };
     }
 
     const unknown = new Set<string>();
     node.traverse((child) => {
       if (child.type !== "SymbolNode") return;
       const name = (child as unknown as { name: string }).name;
-      if (name !== variable && !scope.has(name) && !(name in math)) unknown.add(name);
+      if (!variables.includes(name) && !scope.has(name) && !(name in math)) unknown.add(name);
     });
     if (unknown.size > 0) {
       return { ok: false, error: `Undefined symbol${unknown.size > 1 ? "s" : ""}: ${[...unknown].join(", ")}` };
@@ -202,8 +225,8 @@ export function compileIn(source: string, variable: string, scope: Scope, angleM
 
     const compiled = node.compile();
     const local = new Map(scope);
-    const fn: PlotFunction = (value) => {
-      local.set(variable, value);
+    const fn: MultiFunction = (...values) => {
+      for (let i = 0; i < variables.length; i++) local.set(variables[i], values[i]);
       try {
         const result = compiled.evaluate(local);
         if (typeof result === "number") return result;
@@ -220,6 +243,39 @@ export function compileIn(source: string, variable: string, scope: Scope, angleM
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/** How a user function was defined, so it can be rebuilt elsewhere (the plotting worker). */
+export type FunctionDefinition = { source: string; angleMode: AngleMode };
+
+const DEFINITION = Symbol("definition");
+
+/** Tags functions defined by `f(x) = …` in `node` with their source text. */
+function recordDefinitions(node: { traverse: (cb: (child: { type: string }) => void) => void }, scope: Scope, angleMode: AngleMode) {
+  node.traverse((child) => {
+    if (child.type !== "FunctionAssignmentNode") return;
+    const name = (child as unknown as { name: string }).name;
+    const fn = scope.get(name);
+    if (typeof fn === "function") {
+      const definition: FunctionDefinition = { source: child.toString(), angleMode };
+      Object.defineProperty(fn, DEFINITION, { value: definition });
+    }
+  });
+}
+
+/** The definition of a function created by `f(x) = …`, or null for anything else. */
+export function functionDefinition(value: unknown): FunctionDefinition | null {
+  return typeof value === "function" ? ((value as unknown as Record<symbol, FunctionDefinition>)[DEFINITION] ?? null) : null;
+}
+
+/** True for a Math.js matrix; `toArray` gives its plain nested-array form. */
+export function isMatrix(value: unknown): value is { toArray: () => unknown[] } {
+  return typeof value === "object" && value !== null && (value as { isMatrix?: boolean }).isMatrix === true;
+}
+
+/** Rebuilds a Math.js matrix from nested arrays. */
+export function toMatrix(array: unknown[]): unknown {
+  return getEngine("rad").math.matrix(array as number[]);
 }
 
 /** Converts `value` from one unit to another, e.g. (5, "inch", "cm") → 12.7. Throws on unknown or incompatible units. */
