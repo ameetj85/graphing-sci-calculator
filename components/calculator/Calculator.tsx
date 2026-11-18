@@ -409,7 +409,15 @@ export function Calculator() {
           </button>
         </div>
 
-        <Graph curves={curves} traceId={traceId} showKeyPoints={showKeyPoints} />
+        {graphScope.has("x") && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            In the graph, <code>x</code> is the horizontal axis, so the calculator&apos;s <code>x</code> isn&apos;t used here.
+            To evaluate at a specific x, type the function (for example <code>cos(x)</code>) in the Expression input. Other
+            variables, such as <code>a</code> in <code>a cos(x)</code>, do apply to the graph.
+          </p>
+        )}
+
+        <Graph curves={curves} traceId={traceId} showKeyPoints={showKeyPoints} angleMode={angleMode} />
         {showKeyPoints && curves.length > 0 && (
           <p className="text-xs text-zinc-500">Hover a dot to see a root or intersection; click it to pin its coordinates.</p>
         )}
