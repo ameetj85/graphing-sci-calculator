@@ -4,7 +4,8 @@ import { browser } from "react-dom";
 import { use, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from "react";
 import { Tex } from "@/components/Tex";
 import { EquationList } from "@/components/graph/EquationList";
-import { Graph, type GraphCurve } from "@/components/graph/Graph";
+import { Graph, type GraphCurve, type GraphShape } from "@/components/graph/Graph";
+import { compilePlot, type PlotResult } from "@/lib/graph/plotSpec";
 import { EMPTY_EDITOR, editorReducer, type EditorAction, type EditorState } from "@/lib/calculator/editor";
 import { addHistoryEntry, loadHistory, saveHistory, type HistoryEntry } from "@/lib/calculator/history";
 import { KEYBOARD_TO_KEY, type KeyAction } from "@/lib/calculator/keys";
@@ -17,12 +18,10 @@ import {
   type Equation,
 } from "@/lib/graph/equations";
 import {
-  compileFunction,
   createScope,
   evaluateExpression,
   expressionToTex,
   type AngleMode,
-  type CompileResult,
   type EvalResult,
   type Scope,
 } from "@/lib/math/engine";
@@ -127,21 +126,25 @@ export function Calculator() {
   const exactForm = useMemo(() => (result?.ok ? toExactForm(result.value) : null), [result]);
 
   const compiled = useMemo(() => {
-    const byId: Record<string, CompileResult> = {};
-    for (const eq of equations) byId[eq.id] = compileFunction(eq.text, graphScope, angleMode);
+    const byId: Record<string, PlotResult> = {};
+    for (const eq of equations) byId[eq.id] = compilePlot(eq.text, graphScope, angleMode);
     return byId;
   }, [equations, graphScope, angleMode]);
 
-  const curves = useMemo<GraphCurve[]>(
-    () =>
-      equations.flatMap((eq, index) => {
-        const compiledEq = compiled[eq.id];
-        return eq.visible && compiledEq.ok
-          ? [{ id: eq.id, name: equationName(index), fn: compiledEq.fn, color: eq.color }]
-          : [];
-      }),
-    [equations, compiled],
-  );
+  // y = f(x) curves (traceable, tabulated) and other shapes, visible ones only.
+  const { curves, shapes } = useMemo(() => {
+    const curves: GraphCurve[] = [];
+    const shapes: GraphShape[] = [];
+    equations.forEach((eq, index) => {
+      const result = compiled[eq.id];
+      if (!eq.visible || !result.ok) return;
+      const { spec } = result;
+      if (spec.kind === "function") curves.push({ id: eq.id, name: equationName(index), fn: spec.fn, color: eq.color });
+      else if (spec.kind === "inequality") shapes.push({ id: eq.id, color: eq.color, kind: "inequality", fn: spec.fn, op: spec.op });
+      else shapes.push({ id: eq.id, color: eq.color, kind: "curve", xy: spec.xy, tMin: spec.tMin, tMax: spec.tMax });
+    });
+    return { curves, shapes };
+  }, [equations, compiled]);
 
   // Keep the URL shareable and remember settings and history.
   useEffect(() => {
@@ -477,6 +480,7 @@ export function Calculator() {
           <div className="absolute inset-0">
             <Graph
               curves={curves}
+              shapes={shapes}
               traceId={traceId}
               traceX={traceX}
               onTraceMove={setTraceX}

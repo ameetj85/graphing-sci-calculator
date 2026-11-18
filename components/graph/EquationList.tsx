@@ -4,13 +4,13 @@ import type { Dispatch } from "react";
 import { ExpressionInput } from "@/components/calculator/ExpressionInput";
 import type { EditorAction, EditorState } from "@/lib/calculator/editor";
 import { MAX_EQUATIONS, equationName, type Equation } from "@/lib/graph/equations";
-import type { CompileResult } from "@/lib/math/engine";
+import type { PlotResult } from "@/lib/graph/plotSpec";
 
 type EquationListProps = {
   equations: Equation[];
   editorFor: (equation: Equation) => EditorState;
   dispatchFor: (id: string) => Dispatch<EditorAction>;
-  compiled: Record<string, CompileResult>;
+  compiled: Record<string, PlotResult>;
   activeId: string | null;
   registerInput: (id: string, element: HTMLInputElement | null) => void;
   onFocus: (id: string) => void;
@@ -38,6 +38,14 @@ export function EquationList({
           const name = equationName(index);
           const result = compiled[equation.id];
           const error = equation.text.trim() && result && !result.ok ? result.error : null;
+          const spec = result?.ok ? result.spec : null;
+          const variable = spec?.kind === "polar" && spec.rangeLabel.startsWith("θ") ? "theta" : "t";
+          const hint =
+            spec && (spec.kind === "polar" || spec.kind === "parametric")
+              ? `${spec.kind === "polar" ? "Polar" : "Parametric"}, ${spec.rangeLabel}. End with {-5 <= ${variable} <= 5} to change the range.`
+              : spec?.kind === "inequality"
+                ? `Shaded inequality${spec.op === "<" || spec.op === ">" ? " (dashed edge: not included)" : ""}`
+                : null;
           return (
             <li key={equation.id}>
               <div
@@ -58,8 +66,12 @@ export function EquationList({
                     background: equation.visible ? equation.color : "transparent",
                   }}
                 />
-                <label htmlFor={`eq-${equation.id}`} className="shrink-0 font-mono text-zinc-600 dark:text-zinc-400">
-                  {name} =
+                <label
+                  htmlFor={`eq-${equation.id}`}
+                  className="w-5 shrink-0 text-right font-mono text-sm text-zinc-500"
+                  title={`Equation ${index + 1}; shown as ${name} in the table and trace`}
+                >
+                  {index + 1}
                 </label>
                 <ExpressionInput
                   id={`eq-${equation.id}`}
@@ -67,7 +79,7 @@ export function EquationList({
                   dispatch={dispatchFor(equation.id)}
                   registerInput={(element) => registerInput(equation.id, element)}
                   onFocus={() => onFocus(equation.id)}
-                  placeholder="a function of x"
+                  placeholder="x^2,  y > x,  r = 2sin(3theta),  (cos(t), sin(t))"
                   className={equation.visible ? "" : "opacity-60"}
                 />
                 <button
@@ -80,7 +92,8 @@ export function EquationList({
                   ×
                 </button>
               </div>
-              {error && <p className="mt-0.5 ml-16 text-xs text-red-600 dark:text-red-400">{error}</p>}
+              {error && <p className="mt-0.5 ml-14 text-xs text-red-600 dark:text-red-400">{error}</p>}
+              {!error && hint && <p className="mt-0.5 ml-14 text-xs text-zinc-500">{hint}</p>}
             </li>
           );
         })}
