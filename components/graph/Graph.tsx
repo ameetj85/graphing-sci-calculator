@@ -1,7 +1,7 @@
 "use client";
 
 import { Mafs } from "mafs";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { nearestDefinedX } from "@/lib/graph/keyPoints";
 import type { AngleMode, PlotFunction } from "@/lib/math/engine";
 import { AdaptiveGrid } from "./AdaptiveGrid";
@@ -29,53 +29,63 @@ type GraphProps = {
   curves: GraphCurve[];
   /** Id of the curve to trace, or null to hide the trace point. */
   traceId: string | null;
+  /** x of the trace point, shared with the value table. */
+  traceX: number;
+  onTraceMove: (x: number) => void;
   showKeyPoints: boolean;
   angleMode: AngleMode;
-  height?: number;
 };
 
-export function Graph({ curves, traceId, showKeyPoints, angleMode, height = 460 }: GraphProps) {
+/** Fills its container: the parent decides the size, the graph measures it. */
+export function Graph({ curves, traceId, traceX, onTraceMove, showKeyPoints, angleMode }: GraphProps) {
   // Remounting Mafs is the only way to reset its internal pan/zoom state.
   const [view, setView] = useState<{ key: number; box: ViewBox }>({ key: 0, box: DEFAULT_VIEW });
   const showView = (box: ViewBox) => setView((current) => ({ key: current.key + 1, box }));
-  const [trace, setTrace] = useState<{ id: string | null; x: number }>({ id: null, x: 0 });
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
+  useLayoutEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setHeight(Math.floor(entry.contentRect.height)));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const traced = curves.find((curve) => curve.id === traceId) ?? null;
-  // Start tracing near x = 0 when the traced curve changes, and step off any
-  // x where the (possibly edited) function is undefined.
-  const traceX = useMemo(() => {
-    if (!traced) return null;
-    const x = trace.id === traced.id ? trace.x : 0;
-    return nearestDefinedX(traced.fn, x, 0.05);
-  }, [traced, trace]);
+  // Step off any x where the (possibly edited) traced function is undefined.
+  const tracePointX = useMemo(
+    () => (traced ? nearestDefinedX(traced.fn, traceX, 0.05) : null),
+    [traced, traceX],
+  );
 
   const keyPointCurves = useMemo(() => curves.map(({ id, fn }) => ({ id, fn })), [curves]);
   const names = useMemo(() => Object.fromEntries(curves.map((c) => [c.id, c.name])), [curves]);
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <Mafs
-        key={view.key}
-        height={height}
-        viewBox={view.box}
-        preserveAspectRatio={false}
-        pan
-        zoom={{ min: 0.05, max: 20 }}
-      >
-        <AdaptiveGrid />
-        {curves.map((curve) => (
-          <FunctionCurve key={curve.id} fn={curve.fn} color={curve.color} />
-        ))}
-        {showKeyPoints && curves.length > 0 && <KeyPoints curves={keyPointCurves} names={names} />}
-        {traced && traceX !== null && (
-          <TracePoint
-            fn={traced.fn}
-            x={traceX}
-            color={traced.color}
-            onMove={(x) => setTrace({ id: traced.id, x })}
-          />
-        )}
-      </Mafs>
+    <div
+      ref={containerRef}
+      className="relative h-full w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800"
+    >
+      {height > 0 && (
+        <Mafs
+          key={view.key}
+          height={height}
+          viewBox={view.box}
+          preserveAspectRatio={false}
+          pan
+          zoom={{ min: 0.05, max: 20 }}
+        >
+          <AdaptiveGrid />
+          {curves.map((curve) => (
+            <FunctionCurve key={curve.id} fn={curve.fn} color={curve.color} />
+          ))}
+          {showKeyPoints && curves.length > 0 && <KeyPoints curves={keyPointCurves} names={names} />}
+          {traced && tracePointX !== null && (
+            <TracePoint fn={traced.fn} x={tracePointX} color={traced.color} onMove={onTraceMove} />
+          )}
+        </Mafs>
+      )}
       <div className="absolute top-2 right-2 flex gap-1">
         <ViewButton
           onClick={() => showView(TRIG_VIEW[angleMode])}
