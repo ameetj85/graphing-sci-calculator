@@ -268,3 +268,21 @@ function resultToTex(value: unknown): string {
     return `\\text{${formatValue(value)}}`;
   }
 }
+
+/** True when `name` is a built-in function or constant (sin, pi, speedOfLight, ...). */
+export function isBuiltInName(name: string): boolean {
+  return name in getEngine("rad").math;
+}
+
+/**
+ * Compiles one statement or expression for repeated evaluation, as used by
+ * the program interpreter. Throws on syntax errors. Evaluating it may change
+ * the scope (assignments) and returns the last result.
+ */
+export function compileStatement(source: string, angleMode: AngleMode = "rad"): (scope: Scope) => unknown {
+  const compiled = getEngine(angleMode).parse(source).compile();
+  return (scope) => {
+    const value = compiled.evaluate(scope);
+    return isResultSet(value) ? value.entries.at(-1) : value;
+  };
+}

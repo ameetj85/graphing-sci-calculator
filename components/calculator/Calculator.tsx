@@ -21,6 +21,7 @@ import {
   createScope,
   evaluateExpression,
   expressionToTex,
+  formatValue,
   type AngleMode,
   type EvalResult,
   type Scope,
@@ -33,6 +34,9 @@ import { StatsPanel } from "@/components/tools/StatsPanel";
 import { ToolsPanel } from "@/components/tools/ToolsPanel";
 import { UnitsPanel } from "@/components/tools/UnitsPanel";
 import { VariablesPanel } from "@/components/tools/VariablesPanel";
+import { ProgramsPanel, type ProgramRun } from "@/components/tools/ProgramsPanel";
+import { captureOutput, registerPrograms, runProgram, type Program } from "@/lib/script/interpreter";
+import { loadPrograms, savePrograms, validateProgram } from "@/lib/script/programs";
 import {
   DATA_KEY,
   MATRICES_KEY,
@@ -88,6 +92,7 @@ function loadInitialState() {
     history: loadHistory(storage),
     data: loadData(storage),
     matrices: loadMatrices(storage),
+    programs: loadPrograms(storage),
   };
 }
 
@@ -126,6 +131,8 @@ export function Calculator() {
   const [initialScope] = useState<Scope>(() => {
     const scope = createScope();
     for (const [name, value] of workspaceVariables(initial.data, initial.matrices)) scope.set(name, value);
+    // Saved programs are callable from expressions and graphs.
+    registerPrograms(scope, initial.programs, initial.angleMode);
     return scope;
   });
   const scopeRef = useRef<Scope>(initialScope);
@@ -136,6 +143,7 @@ export function Calculator() {
   const [matrices, setMatrices] = useState<Matrices>(initial.matrices);
   const [plotData, setPlotData] = useState(false);
   const [angleMode, setAngleMode] = useState<AngleMode>(initial.angleMode);
+  const [programs, setPrograms] = useState<Program[]>(initial.programs);
 
   const inputs = useRef(new Map<string, HTMLInputElement>());
   const [expression, dispatchExpression] = useReducer(editorReducer, EMPTY_EDITOR);
@@ -154,6 +162,8 @@ export function Calculator() {
 
   const [history, setHistory] = useState<HistoryEntry[]>(initial.history);
   const [result, setResult] = useState<EvalResult | null>(null);
+  // Lines printed by programs that the last expression called.
+  const [printed, setPrinted] = useState<string[]>([]);
   const [lastExpression, setLastExpression] = useState("");
   const [secondActive, setSecondActive] = useState(false);
   const [flashedKeyId, setFlashedKeyId] = useState<string | null>(null);
@@ -201,6 +211,57 @@ export function Calculator() {
   useEffect(() => saveHistory(safeLocalStorage(), history), [history]);
   useEffect(() => writeJson(safeLocalStorage(), DATA_KEY, data), [data]);
   useEffect(() => writeJson(safeLocalStorage(), MATRICES_KEY, matrices), [matrices]);
+  useEffect(() => savePrograms(safeLocalStorage(), programs), [programs]);
+
+  /** Re-registers program functions in the scope (programs or angle mode changed). */
+  function syncPrograms(nextPrograms: Program[], mode: AngleMode) {
+    registerPrograms(scopeRef.current, nextPrograms, mode);
+    setGraphScope(new Map(scopeRef.current));
+  }
+
+  function changeAngleMode(mode: AngleMode) {
+    setAngleMode(mode);
+    syncPrograms(programs, mode);
+  }
+
+  function saveProgram(program: Program): string | null {
+    const others = programs.filter((p) => p.id !== program.id);
+    const error = validateProgram(program, others);
+    if (error) return error;
+    const exists = others.length < programs.length;
+    const next = exists ? programs.map((p) => (p.id === program.id ? program : p)) : [...programs, program];
+    setPrograms(next);
+    syncPrograms(next, angleMode);
+    return null;
+  }
+
+  function deleteProgram(id: string) {
+    const next = programs.filter((p) => p.id !== id);
+    setPrograms(next);
+    syncPrograms(next, angleMode);
+  }
+
+  /** Runs a program from the Programs tab; a returned value becomes ans and goes into history. */
+  function runSavedProgram(program: Program, argTexts: string[]): ProgramRun {
+    const args: unknown[] = [];
+    for (const [i, text] of argTexts.entries()) {
+      if (!text.trim()) return { ok: false, error: `Enter a value for ${program.params[i]} in the Run row`, output: [] };
+      // Arguments are evaluated in a copy so they don't change ans.
+      const arg = evaluateExpression(text, new Map(scopeRef.current), angleMode);
+      if (!arg.ok) return { ok: false, error: `${program.params[i]}: ${arg.error}`, output: [] };
+      args.push(arg.value);
+    }
+    const run = runProgram(program, args, scopeRef.current, angleMode);
+    if (!run.ok) return run;
+    if (run.value === undefined) return { ok: true, value: null, output: run.output };
+
+    const display = formatValue(run.value);
+    scopeRef.current.set("ans", run.value);
+    setGraphScope(new Map(scopeRef.current));
+    const call = `${program.name}(${argTexts.map((t) => t.trim()).join(", ")})`;
+    setHistory((entries) => addHistoryEntry(entries, { expression: call, result: display, at: Date.now() }));
+    return { ok: true, value: display, output: run.output };
+  }
 
   /** Replaces the data lists and matrices, and the variables they define. */
   function updateWorkspace(nextData: DataLists, nextMatrices: Matrices) {
@@ -279,8 +340,9 @@ export function Calculator() {
   function evaluate() {
     const source = expression.value;
     if (!source.trim()) return;
-    const evaluated = evaluateExpression(source, scopeRef.current, angleMode);
+    const { value: evaluated, output } = captureOutput(() => evaluateExpression(source, scopeRef.current, angleMode));
     setResult(evaluated);
+    setPrinted(output);
     setLastExpression(source);
     setGraphScope(new Map(scopeRef.current));
     if (evaluated.ok) {
@@ -404,7 +466,7 @@ export function Calculator() {
                   { value: "grad", label: "GRAD" },
                 ]}
                 value={angleMode}
-                onChange={setAngleMode}
+                onChange={changeAngleMode}
               />
             </div>
             <ExpressionInput
@@ -427,6 +489,14 @@ export function Calculator() {
           </div>
 
           <div className="mt-1 mb-4 min-h-16 border-t border-zinc-200 pt-3 dark:border-zinc-800" aria-live="polite">
+            {printed.length > 0 && (
+              <pre
+                aria-label="Printed output"
+                className="mb-2 max-h-32 overflow-auto rounded-lg bg-zinc-50 px-2 py-1 font-mono text-xs text-zinc-600 dark:bg-zinc-950 dark:text-zinc-400"
+              >
+                {printed.join("\n")}
+              </pre>
+            )}
             {result?.ok === true && (
               <div className="flex flex-col items-end gap-1">
                 <div className="flex w-full items-center justify-between gap-2">
@@ -633,6 +703,20 @@ export function Calculator() {
               id: "variables",
               label: "Variables",
               content: <VariablesPanel scope={graphScope} onInsert={insertIntoExpression} onDelete={deleteVariable} />,
+            },
+            {
+              id: "programs",
+              label: "Programs",
+              content: (
+                <ProgramsPanel
+                  programs={programs}
+                  angleMode={angleMode}
+                  onSave={saveProgram}
+                  onDelete={deleteProgram}
+                  onRun={runSavedProgram}
+                  onInsert={insertIntoExpression}
+                />
+              ),
             },
           ]}
         />

@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { WORKSPACE_VARIABLES } from "@/lib/calculator/workspace";
+import { isProgramFunction } from "@/lib/script/interpreter";
 import { MATH_CONSTANTS, PHYSICAL_CONSTANTS, type ConstantInfo } from "@/lib/math/constants";
 import { createScope, evaluateExpression, formatValue, type Scope } from "@/lib/math/engine";
 
@@ -24,7 +25,8 @@ export function VariablesPanel({ scope, onInsert, onDelete }: VariablesPanelProp
   const variables = useMemo(
     () =>
       [...scope.entries()]
-        .filter(([name]) => !WORKSPACE_VARIABLES.includes(name))
+        // Data lists, matrices and programs have their own tabs.
+        .filter(([name, value]) => !WORKSPACE_VARIABLES.includes(name) && !isProgramFunction(value))
         .sort(([a], [b]) => (a === "ans" ? -1 : b === "ans" ? 1 : a.localeCompare(b))),
     [scope],
   );
@@ -58,7 +60,7 @@ export function VariablesPanel({ scope, onInsert, onDelete }: VariablesPanelProp
         </ul>
         <p className="mt-2 text-xs text-zinc-500">
           Store values with <code>name = value</code> and functions with <code>f(x) = …</code> in the Expression input.
-          Data lists and matrices are in their own tabs.
+          Data lists, matrices and programs are in their own tabs.
         </p>
       </section>
 
