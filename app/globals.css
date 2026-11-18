@@ -26,6 +26,8 @@ body {
 }
 
 /* Graph colors that follow the page theme. Higher specificity than mafs/core.css. */
+/* Defined on :root too so equation swatches outside the graph can use them. */
+:root,
 :root .MafsView {
   --mafs-bg: #ffffff;
   --mafs-fg: #18181b;
@@ -41,6 +43,7 @@ body {
 }
 
 @media (prefers-color-scheme: dark) {
+  :root,
   :root .MafsView {
     --mafs-bg: #09090b;
     --mafs-fg: #e4e4e7;

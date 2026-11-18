@@ -103,6 +103,53 @@ describe("evaluateExpression", () => {
   });
 });
 
+describe("angle modes", () => {
+  const deg = (expr: string) => {
+    const result = evaluateExpression(expr, createScope(), "deg");
+    if (!result.ok) throw new Error(result.error);
+    return result.display;
+  };
+
+  it("reads trig inputs as degrees in degree mode", () => {
+    expect(deg("sin(30)")).toBe("0.5");
+    expect(deg("cos(60)")).toBe("0.5");
+    expect(deg("tan(45)")).toBe("1");
+    expect(deg("sin(90) + cos(0)")).toBe("2");
+  });
+
+  it("returns exact zeros instead of rounding noise", () => {
+    expect(deg("sin(180)")).toBe("0");
+    expect(deg("cos(90)")).toBe("0");
+    expect(deg("tan(360)")).toBe("0");
+    expect(evalOk("sin(pi)").display).toBe("0");
+    expect(evalOk("cos(pi/2)").display).toBe("0");
+  });
+
+  it("returns inverse trig results in degrees in degree mode", () => {
+    expect(deg("asin(0.5)")).toBe("30");
+    expect(deg("acos(0)")).toBe("90");
+    expect(deg("atan2(1, 1)")).toBe("45");
+    expect(evalOk("asin(1)").display).toBe("1.57079632679");
+  });
+
+  it("treats tan at odd multiples of 90 degrees as undefined", () => {
+    expect(evaluateExpression("tan(90)", createScope(), "deg").ok).toBe(false);
+    const fn = compileFunction("tan(x)", createScope(), "deg");
+    expect(fn.ok && fn.fn(270)).toBeNaN();
+  });
+
+  it("still honors explicit units in degree mode", () => {
+    expect(evalOk("sin(30 deg)").display).toBe("0.5");
+    // Implicit multiplication binds tighter than division: `pi/2 rad` is pi / (2 rad).
+    expect(deg("sin((pi/2) rad)")).toBe("1");
+  });
+
+  it("graphs in the selected angle mode", () => {
+    const fn = compileFunction("sin(x)", createScope(), "deg");
+    expect(fn.ok && fn.fn(90)).toBe(1);
+  });
+});
+
 describe("expressionToTex", () => {
   it("renders TeX for valid input and null for incomplete input", () => {
     expect(expressionToTex("sqrt(x)")?.replace(/\s/g, "")).toBe("\\sqrt{x}");

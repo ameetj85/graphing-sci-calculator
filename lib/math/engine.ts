@@ -1,33 +1,104 @@
-import { all, create } from "mathjs";
+import { all, create, type MathJsInstance } from "mathjs";
 
-/**
- * Sandboxed Math.js instance. Expressions come from user input, so functions
- * that could redefine the instance or re-enter the parser are disabled for
- * expressions (per the Math.js security guide). Internal references to the
- * parser are captured before they are overridden.
- */
-const math = create(all, { number: "number", precision: 64 });
+export type AngleMode = "rad" | "deg";
 
-const parse = math.parse;
-const format = math.format;
+type Engine = {
+  math: MathJsInstance;
+  parse: MathJsInstance["parse"];
+};
 
 const disabled = (name: string) => () => {
   throw new Error(`Function ${name} is disabled`);
 };
 
-math.import(
-  {
-    import: disabled("import"),
-    createUnit: disabled("createUnit"),
-    evaluate: disabled("evaluate"),
-    parse: disabled("parse"),
-    simplify: disabled("simplify"),
-    derivative: disabled("derivative"),
-    resolve: disabled("resolve"),
-    reviver: disabled("reviver"),
-  },
-  { override: true },
-);
+/** Results smaller than this from trig functions of non-tiny inputs are rounding noise (sin(pi)). */
+const TRIG_NOISE = 1e-15;
+const DEG = Math.PI / 180;
+
+const snapNoise = (result: number, input: number) =>
+  Math.abs(result) < TRIG_NOISE && Math.abs(input) > 1e-6 ? 0 : result;
+
+/** True when `degrees` is an exact multiple of `step` plus `offset`. */
+const isMultiple = (degrees: number, step: number, offset = 0) => Number.isInteger((degrees - offset) / step);
+
+/**
+ * Trig functions for the given angle mode. In degree mode, real-number inputs
+ * to sin/cos/tan are read as degrees and inverse functions return degrees.
+ * Non-number inputs (units such as `30 deg`, complex numbers) go to Math.js
+ * unchanged. Exact zeros (sin 180°, cos 90°, sin π) are returned as 0 rather
+ * than floating-point noise, and tan at an odd multiple of 90° is an error.
+ */
+function trigFunctions(math: MathJsInstance, mode: AngleMode) {
+  const { sin, cos, tan, asin, acos, atan, atan2, asec, acsc, acot } = math;
+  const isDeg = mode === "deg";
+  const toRad = (x: number) => (isDeg ? x * DEG : x);
+  const fromRad = (value: unknown) => (isDeg && typeof value === "number" ? value / DEG : value);
+
+  const wrappedSin = (x: unknown) => {
+    if (typeof x !== "number") return sin(x as number);
+    if (isDeg && isMultiple(x, 180)) return 0;
+    return snapNoise(Math.sin(toRad(x)), x);
+  };
+  const wrappedCos = (x: unknown) => {
+    if (typeof x !== "number") return cos(x as number);
+    if (isDeg && isMultiple(x, 180, 90)) return 0;
+    return snapNoise(Math.cos(toRad(x)), x);
+  };
+  const wrappedTan = (x: unknown) => {
+    if (typeof x !== "number") return tan(x as number);
+    if (isDeg && isMultiple(x, 180)) return 0;
+    if (isDeg && isMultiple(x, 180, 90)) throw new Error(`tan is undefined at ${x}°`);
+    return snapNoise(Math.tan(toRad(x)), x);
+  };
+
+  return {
+    sin: wrappedSin,
+    cos: wrappedCos,
+    tan: wrappedTan,
+    sec: (x: unknown) => 1 / (wrappedCos(x) as number),
+    csc: (x: unknown) => 1 / (wrappedSin(x) as number),
+    cot: (x: unknown) => 1 / (wrappedTan(x) as number),
+    asin: (x: unknown) => fromRad(asin(x as number)),
+    acos: (x: unknown) => fromRad(acos(x as number)),
+    atan: (x: unknown) => fromRad(atan(x as number)),
+    atan2: (y: unknown, x: unknown) => fromRad(atan2(y as number, x as number)),
+    asec: (x: unknown) => fromRad(asec(x as number)),
+    acsc: (x: unknown) => fromRad(acsc(x as number)),
+    acot: (x: unknown) => fromRad(acot(x as number)),
+  };
+}
+
+/**
+ * Builds a sandboxed Math.js instance. Expressions come from user input, so
+ * functions that could redefine the instance or re-enter the parser are
+ * disabled for expressions (per the Math.js security guide). The parser is
+ * captured before it is overridden.
+ */
+function buildEngine(mode: AngleMode): Engine {
+  const math = create(all, { number: "number", precision: 64 });
+  const parse = math.parse;
+  math.import(
+    {
+      ...trigFunctions(math, mode),
+      import: disabled("import"),
+      createUnit: disabled("createUnit"),
+      evaluate: disabled("evaluate"),
+      parse: disabled("parse"),
+      simplify: disabled("simplify"),
+      derivative: disabled("derivative"),
+      resolve: disabled("resolve"),
+      reviver: disabled("reviver"),
+    },
+    { override: true },
+  );
+  return { math, parse };
+}
+
+const engines: Partial<Record<AngleMode, Engine>> = {};
+const getEngine = (mode: AngleMode): Engine => (engines[mode] ??= buildEngine(mode));
+
+const parse = (source: string) => getEngine("rad").parse(source);
+const format = (value: unknown, options: { precision: number }) => getEngine("rad").math.format(value, options);
 
 /** Variables and functions the user defines, plus `ans`. */
 export type Scope = Map<string, unknown>;
@@ -51,16 +122,16 @@ export function formatValue(value: unknown): string {
 }
 
 /**
- * Evaluates an expression against the given scope. Assignments (`a = 3`,
- * `f(x) = x^2`) are stored in the scope. A successful non-function result is
- * also stored as `ans`.
+ * Evaluates an expression against the given scope, reading trig angles in
+ * `angleMode`. Assignments (`a = 3`, `f(x) = x^2`) are stored in the scope.
+ * A successful non-function result is also stored as `ans`.
  */
-export function evaluateExpression(expr: string, scope: Scope): EvalResult {
+export function evaluateExpression(expr: string, scope: Scope, angleMode: AngleMode = "rad"): EvalResult {
   const source = expr.trim();
   if (!source) return { ok: false, error: "Enter an expression" };
 
   try {
-    const node = parse(source);
+    const node = getEngine(angleMode).parse(source);
     let value = node.compile().evaluate(scope);
     // Multiple statements (`r = 2; pi r^2`) return a ResultSet; show the last
     // visible result. A trailing `;` hides a statement's result.
@@ -85,11 +156,12 @@ export type CompileResult =
  * (`sin`, `pi`, ...) or defined in `scope`. The returned function yields NaN
  * wherever the expression is undefined or not a real number.
  */
-export function compileFunction(expr: string, scope: Scope): CompileResult {
+export function compileFunction(expr: string, scope: Scope, angleMode: AngleMode = "rad"): CompileResult {
   const source = expr.trim().replace(/^y\s*=(?!=)/, "").trim();
   if (!source) return { ok: false, error: "Enter a function of x" };
 
   try {
+    const { math, parse } = getEngine(angleMode);
     const node = parse(source);
     if (node.type === "AssignmentNode" || node.type === "FunctionAssignmentNode") {
       return { ok: false, error: "Enter an expression in x, such as x^2 - 1" };
