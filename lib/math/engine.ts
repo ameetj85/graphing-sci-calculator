@@ -73,6 +73,58 @@ export function evaluateExpression(expr: string, scope: Scope): EvalResult {
   }
 }
 
+export type PlotFunction = (x: number) => number;
+
+export type CompileResult =
+  | { ok: true; fn: PlotFunction; tex: string }
+  | { ok: false; error: string };
+
+/**
+ * Compiles the right-hand side of `y = f(x)` into a fast numeric function.
+ * A leading `y =` is optional. Symbols other than `x` must be built-in
+ * (`sin`, `pi`, ...) or defined in `scope`. The returned function yields NaN
+ * wherever the expression is undefined or not a real number.
+ */
+export function compileFunction(expr: string, scope: Scope): CompileResult {
+  const source = expr.trim().replace(/^y\s*=(?!=)/, "").trim();
+  if (!source) return { ok: false, error: "Enter a function of x" };
+
+  try {
+    const node = parse(source);
+    if (node.type === "AssignmentNode" || node.type === "FunctionAssignmentNode") {
+      return { ok: false, error: "Enter an expression in x, such as x^2 - 1" };
+    }
+
+    const unknown = new Set<string>();
+    node.traverse((child) => {
+      if (child.type !== "SymbolNode") return;
+      const name = (child as unknown as { name: string }).name;
+      if (name !== "x" && !scope.has(name) && !(name in math)) unknown.add(name);
+    });
+    if (unknown.size > 0) {
+      return { ok: false, error: `Undefined symbol${unknown.size > 1 ? "s" : ""}: ${[...unknown].join(", ")}` };
+    }
+
+    const compiled = node.compile();
+    const local = new Map(scope);
+    const fn: PlotFunction = (x) => {
+      local.set("x", x);
+      try {
+        const value = compiled.evaluate(local);
+        if (typeof value === "number") return value;
+        if (typeof value === "boolean") return Number(value);
+        return NaN;
+      } catch {
+        return NaN;
+      }
+    };
+
+    return { ok: true, fn, tex: `y = ${node.toTex({ parenthesis: "keep", implicit: "hide" })}` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 function isResultSet(value: unknown): value is { entries: unknown[] } {
   return (
     typeof value === "object" &&

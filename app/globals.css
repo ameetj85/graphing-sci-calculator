@@ -24,3 +24,34 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
+
+/* Graph colors that follow the page theme. Higher specificity than mafs/core.css. */
+:root .MafsView {
+  --mafs-bg: #ffffff;
+  --mafs-fg: #18181b;
+  --mafs-origin-color: #18181b;
+  --mafs-line-color: #d4d4d8;
+  --grid-line-subdivision-color: #f1f1f3;
+  --mafs-blue: #2563eb;
+  --mafs-red: #dc2626;
+  --mafs-green: #16a34a;
+  --mafs-orange: #ea580c;
+  --mafs-violet: #7c3aed;
+  --mafs-pink: #db2777;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root .MafsView {
+    --mafs-bg: #09090b;
+    --mafs-fg: #e4e4e7;
+    --mafs-origin-color: #e4e4e7;
+    --mafs-line-color: #3f3f46;
+    --grid-line-subdivision-color: #1c1c1f;
+    --mafs-blue: #60a5fa;
+    --mafs-red: #f87171;
+    --mafs-green: #4ade80;
+    --mafs-orange: #fb923c;
+    --mafs-violet: #a78bfa;
+    --mafs-pink: #f472b6;
+  }
+}
