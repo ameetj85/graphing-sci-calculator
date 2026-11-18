@@ -1,0 +1,157 @@
+/** Unit categories for the converter. Names are Math.js unit names, so they also work in expressions. */
+export type UnitOption = { name: string; label: string };
+export type UnitCategory = { id: string; label: string; units: UnitOption[] };
+
+export const UNIT_CATEGORIES: UnitCategory[] = [
+  {
+    id: "length",
+    label: "Length",
+    units: [
+      { name: "mm", label: "millimetre (mm)" },
+      { name: "cm", label: "centimetre (cm)" },
+      { name: "m", label: "metre (m)" },
+      { name: "km", label: "kilometre (km)" },
+      { name: "inch", label: "inch (in)" },
+      { name: "ft", label: "foot (ft)" },
+      { name: "yd", label: "yard (yd)" },
+      { name: "mi", label: "mile (mi)" },
+      { name: "nmi", label: "nautical mile (nmi)" },
+    ],
+  },
+  {
+    id: "mass",
+    label: "Mass",
+    units: [
+      { name: "mg", label: "milligram (mg)" },
+      { name: "g", label: "gram (g)" },
+      { name: "kg", label: "kilogram (kg)" },
+      { name: "tonne", label: "tonne (t)" },
+      { name: "oz", label: "ounce (oz)" },
+      { name: "lb", label: "pound (lb)" },
+      { name: "stone", label: "stone (st)" },
+    ],
+  },
+  {
+    id: "time",
+    label: "Time",
+    units: [
+      { name: "s", label: "second (s)" },
+      { name: "minute", label: "minute" },
+      { name: "hour", label: "hour (h)" },
+      { name: "day", label: "day" },
+      { name: "week", label: "week" },
+      { name: "year", label: "year" },
+    ],
+  },
+  {
+    id: "temperature",
+    label: "Temperature",
+    units: [
+      { name: "degC", label: "Celsius (°C)" },
+      { name: "degF", label: "Fahrenheit (°F)" },
+      { name: "K", label: "kelvin (K)" },
+    ],
+  },
+  {
+    id: "area",
+    label: "Area",
+    units: [
+      { name: "cm2", label: "square centimetre (cm²)" },
+      { name: "m2", label: "square metre (m²)" },
+      { name: "km2", label: "square kilometre (km²)" },
+      { name: "hectare", label: "hectare (ha)" },
+      { name: "sqin", label: "square inch (in²)" },
+      { name: "sqft", label: "square foot (ft²)" },
+      { name: "acre", label: "acre" },
+      { name: "sqmi", label: "square mile (mi²)" },
+    ],
+  },
+  {
+    id: "volume",
+    label: "Volume",
+    units: [
+      { name: "mL", label: "millilitre (mL)" },
+      { name: "L", label: "litre (L)" },
+      { name: "m3", label: "cubic metre (m³)" },
+      { name: "teaspoon", label: "teaspoon (US)" },
+      { name: "tablespoon", label: "tablespoon (US)" },
+      { name: "floz", label: "fluid ounce (US)" },
+      { name: "cup", label: "cup (US)" },
+      { name: "pint", label: "pint (US)" },
+      { name: "quart", label: "quart (US)" },
+      { name: "gallon", label: "gallon (US)" },
+    ],
+  },
+  {
+    id: "speed",
+    label: "Speed",
+    units: [
+      { name: "m/s", label: "metres per second (m/s)" },
+      { name: "km/h", label: "kilometres per hour (km/h)" },
+      { name: "mi/h", label: "miles per hour (mph)" },
+      { name: "ft/s", label: "feet per second (ft/s)" },
+      { name: "knot", label: "knot (kn)" },
+    ],
+  },
+  {
+    id: "energy",
+    label: "Energy",
+    units: [
+      { name: "J", label: "joule (J)" },
+      { name: "kJ", label: "kilojoule (kJ)" },
+      { name: "cal", label: "calorie (cal)" },
+      { name: "kcal", label: "kilocalorie (kcal)" },
+      { name: "Wh", label: "watt-hour (Wh)" },
+      { name: "kWh", label: "kilowatt-hour (kWh)" },
+      { name: "eV", label: "electronvolt (eV)" },
+      { name: "BTU", label: "British thermal unit (BTU)" },
+    ],
+  },
+  {
+    id: "power",
+    label: "Power",
+    units: [
+      { name: "W", label: "watt (W)" },
+      { name: "kW", label: "kilowatt (kW)" },
+      { name: "hp", label: "horsepower (hp)" },
+    ],
+  },
+  {
+    id: "pressure",
+    label: "Pressure",
+    units: [
+      { name: "Pa", label: "pascal (Pa)" },
+      { name: "kPa", label: "kilopascal (kPa)" },
+      { name: "bar", label: "bar" },
+      { name: "atm", label: "atmosphere (atm)" },
+      { name: "psi", label: "pounds per square inch (psi)" },
+      { name: "mmHg", label: "millimetres of mercury (mmHg)" },
+    ],
+  },
+  {
+    id: "angle",
+    label: "Angle",
+    units: [
+      { name: "deg", label: "degree (°)" },
+      { name: "rad", label: "radian (rad)" },
+      { name: "grad", label: "gradian (grad)" },
+      { name: "arcmin", label: "arcminute (′)" },
+      { name: "arcsec", label: "arcsecond (″)" },
+      { name: "cycle", label: "turn" },
+    ],
+  },
+  {
+    id: "data",
+    label: "Data",
+    units: [
+      { name: "b", label: "bit (b)" },
+      { name: "B", label: "byte (B)" },
+      { name: "kB", label: "kilobyte (kB)" },
+      { name: "MB", label: "megabyte (MB)" },
+      { name: "GB", label: "gigabyte (GB)" },
+      { name: "KiB", label: "kibibyte (KiB)" },
+      { name: "MiB", label: "mebibyte (MiB)" },
+      { name: "GiB", label: "gibibyte (GiB)" },
+    ],
+  },
+];

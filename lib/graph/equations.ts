@@ -54,7 +54,7 @@ export type ShareState = {
 export function encodeShareState({ equations, angleMode }: ShareState): string {
   const params = new URLSearchParams();
   for (const text of equations) if (text.trim()) params.append("eq", text);
-  if (angleMode === "deg") params.set("angle", "deg");
+  if (angleMode !== "rad") params.set("angle", angleMode);
   return params.toString();
 }
 
@@ -68,6 +68,6 @@ export function decodeShareState(search: string): Partial<ShareState> {
     .slice(0, MAX_EQUATIONS);
   if (equations.length > 0) result.equations = equations;
   const angle = params.get("angle");
-  if (angle === "deg" || angle === "rad") result.angleMode = angle;
+  if (angle === "deg" || angle === "rad" || angle === "grad") result.angleMode = angle;
   return result;
 }

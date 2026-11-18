@@ -10,7 +10,7 @@
  * Polar and parametric curves may end with a range such as {0 <= t <= 4pi};
  * otherwise t (or θ) runs over one full turn in the current angle mode.
  */
-import { compileFunction, compileIn, evaluateExpression, type AngleMode, type Scope } from "@/lib/math/engine";
+import { HALF_TURN, compileFunction, compileIn, evaluateExpression, type AngleMode, type Scope } from "@/lib/math/engine";
 import { toExactForm } from "@/lib/math/exact";
 import { formatCoordinate } from "./keyPoints";
 import type { Point } from "./sample";
@@ -41,7 +41,6 @@ const normalizeOp = (op: string): Comparison => (op === "≤" ? "<=" : op === "�
 const flipOp = (op: Comparison): Comparison => ({ "<": ">", "<=": ">=", ">": "<", ">=": "<=" })[op] as Comparison;
 const OP_TEX: Record<Comparison, string> = { "<": "<", "<=": "\\le", ">": ">", ">=": "\\ge" };
 
-const DEG = Math.PI / 180;
 
 /** Splits on commas that are not inside parentheses or brackets. */
 export function splitTopLevel(source: string): string[] {
@@ -74,7 +73,7 @@ function unwrapParens(source: string): string | null {
 }
 
 function formatBound(value: number, angleMode: AngleMode): string {
-  if (angleMode === "deg" || Number.isInteger(value)) return formatCoordinate(value);
+  if (angleMode !== "rad" || Number.isInteger(value)) return formatCoordinate(value);
   return toExactForm(value)?.text ?? formatCoordinate(value);
 }
 
@@ -106,10 +105,10 @@ export function compilePlot(text: string, scope: Scope, angleMode: AngleMode): P
     range = { min, max };
     body = body.slice(0, rangeMatch.index).trim();
   }
-  const fullTurn = angleMode === "deg" ? 360 : 2 * Math.PI;
+  const fullTurn = 2 * HALF_TURN[angleMode];
   const tMin = range?.min ?? 0;
   const tMax = range?.max ?? fullTurn;
-  const toRadians = (angle: number) => (angleMode === "deg" ? angle * DEG : angle);
+  const toRadians = (angle: number) => (angle * Math.PI) / HALF_TURN[angleMode];
 
   const polar = body.match(POLAR);
   if (polar) {
