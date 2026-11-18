@@ -1,18 +1,20 @@
 "use client";
 
-import { useLayoutEffect, type Dispatch, type KeyboardEvent, type RefObject } from "react";
+import { useLayoutEffect, useRef, type Dispatch, type KeyboardEvent } from "react";
 import type { EditorAction, EditorState } from "@/lib/calculator/editor";
 
 type ExpressionInputProps = {
   id: string;
-  inputRef: RefObject<HTMLInputElement | null>;
   editor: EditorState;
   dispatch: Dispatch<EditorAction>;
+  /** Receives the input element so the parent can focus it. */
+  registerInput?: (element: HTMLInputElement | null) => void;
   onFocus?: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
   placeholder?: string;
   autoFocus?: boolean;
   ariaLabel?: string;
+  className?: string;
 };
 
 /**
@@ -22,25 +24,31 @@ type ExpressionInputProps = {
  */
 export function ExpressionInput({
   id,
-  inputRef,
   editor,
   dispatch,
+  registerInput,
   onFocus,
   onKeyDown,
   placeholder,
   autoFocus,
   ariaLabel,
+  className = "",
 }: ExpressionInputProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
   // Mirror the editor's selection into the input while it has focus.
   useLayoutEffect(() => {
     const input = inputRef.current;
     if (input && document.activeElement === input) input.setSelectionRange(editor.start, editor.end);
-  }, [editor, inputRef]);
+  }, [editor]);
 
   return (
     <input
       id={id}
-      ref={inputRef}
+      ref={(element) => {
+        inputRef.current = element;
+        registerInput?.(element);
+      }}
       value={editor.value}
       aria-label={ariaLabel}
       onFocus={onFocus}
@@ -72,7 +80,7 @@ export function ExpressionInput({
       autoCapitalize="off"
       spellCheck={false}
       autoFocus={autoFocus}
-      className="w-full min-w-0 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 font-mono text-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-700 dark:bg-zinc-950"
+      className={`w-full min-w-0 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 font-mono text-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-700 dark:bg-zinc-950 ${className}`}
     />
   );
 }
