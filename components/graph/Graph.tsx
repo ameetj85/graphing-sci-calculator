@@ -1,8 +1,8 @@
 "use client";
 
-import { Mafs } from "mafs";
+import { Mafs, Point as MafsPoint } from "mafs";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { nearestDefinedX } from "@/lib/graph/keyPoints";
+import { formatCoordinate, nearestDefinedX } from "@/lib/graph/keyPoints";
 import type { Comparison } from "@/lib/graph/plotSpec";
 import type { Point } from "@/lib/graph/sample";
 import type { AngleMode, PlotFunction } from "@/lib/math/engine";
@@ -34,7 +34,10 @@ export type GraphCurve = {
 export type GraphShape = { id: string; color: string } & (
   | { kind: "inequality"; fn: PlotFunction; op: Comparison }
   | { kind: "curve"; xy: (t: number) => Point; tMin: number; tMax: number }
+  | { kind: "points"; points: Point[] }
 );
+
+const MAX_DATA_POINTS = 500;
 
 type GraphProps = {
   curves: GraphCurve[];
@@ -103,6 +106,19 @@ export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoi
           {curves.map((curve) => (
             <FunctionCurve key={curve.id} fn={curve.fn} color={curve.color} />
           ))}
+          {shapes.map((shape) =>
+            shape.kind === "points"
+              ? shape.points.slice(0, MAX_DATA_POINTS).map(([x, y], i) => (
+                  <MafsPoint
+                    key={`${shape.id}-${i}`}
+                    x={x}
+                    y={y}
+                    color={shape.color}
+                    svgCircleProps={{ r: 4.5, children: <title>{`(${formatCoordinate(x)}, ${formatCoordinate(y)})`}</title> }}
+                  />
+                ))
+              : null,
+          )}
           {showKeyPoints && curves.length > 0 && <KeyPoints curves={keyPointCurves} names={names} />}
           {traced && tracePointX !== null && (
             <TracePoint fn={traced.fn} x={tracePointX} color={traced.color} onMove={onTraceMove} />

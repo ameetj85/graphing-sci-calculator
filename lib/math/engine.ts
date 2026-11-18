@@ -1,4 +1,5 @@
 import { all, create, type MathJsInstance } from "mathjs";
+import { DISTRIBUTIONS } from "@/lib/stats/distributions";
 
 export type AngleMode = "rad" | "deg";
 
@@ -80,6 +81,7 @@ function buildEngine(mode: AngleMode): Engine {
   math.import(
     {
       ...trigFunctions(math, mode),
+      ...DISTRIBUTIONS,
       import: disabled("import"),
       createUnit: disabled("createUnit"),
       evaluate: disabled("evaluate"),
@@ -228,8 +230,22 @@ export function expressionToTex(expr: string): string | null {
   }
 }
 
+/** The values of a one-dimensional array or Math.js vector, else null. */
+function asList(value: unknown): unknown[] | null {
+  const array =
+    Array.isArray(value)
+      ? value
+      : typeof value === "object" && value !== null && "toArray" in value && typeof value.toArray === "function"
+        ? (value.toArray() as unknown[])
+        : null;
+  return array && array.length > 0 && array.every((item) => !Array.isArray(item)) ? array : null;
+}
+
 function resultToTex(value: unknown): string {
   if (typeof value === "function") return `\\text{${formatValue(value)}}`;
+  // Show lists such as [1, 2, 3] as a row rather than Math.js' column vector.
+  const list = asList(value);
+  if (list) return `\\begin{bmatrix}${list.map((item) => formatValue(item)).join(" & ")}\\end{bmatrix}`;
   try {
     return parse(formatValue(value)).toTex();
   } catch {
