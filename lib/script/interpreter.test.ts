@@ -180,7 +180,7 @@ describe("saved programs", () => {
     expect(validateProgram({ ...base, name: "L1" }, [])).toBe("L1 is reserved");
     expect(validateProgram({ ...base, name: "fib" }, examplePrograms())).toBe("There's already a program called fib");
     expect(validateProgram({ ...base, name: "f", params: ["a", "a"] }, [])).toBe("Parameter names must be different");
-    expect(validateProgram({ ...base, name: "f", params: parseParams("a, b c") }, [])).toBe('Parameter "b c" isn\'t a valid name');
+    expect(validateProgram({ ...base, name: "f", params: parseParams("a, b c") }, [])).toMatch(/^Parameter names must be names such as n or x, not "b c"/);
     expect(validateProgram({ ...base, name: "area", params: parseParams(" w , h ") }, [])).toBeNull();
   });
 

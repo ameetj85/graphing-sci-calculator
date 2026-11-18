@@ -245,6 +245,7 @@ export function Calculator() {
   function runSavedProgram(program: Program, argTexts: string[]): ProgramRun {
     const args: unknown[] = [];
     for (const [i, text] of argTexts.entries()) {
+      if (!text.trim()) return { ok: false, error: `Enter a value for ${program.params[i]} in the Run row`, output: [] };
       // Arguments are evaluated in a copy so they don't change ans.
       const arg = evaluateExpression(text, new Map(scopeRef.current), angleMode);
       if (!arg.ok) return { ok: false, error: `${program.params[i]}: ${arg.error}`, output: [] };

@@ -103,7 +103,9 @@ export function validateProgram(program: Omit<Program, "id">, others: Program[])
   if (isBuiltInName(name)) return `${name} is a built-in function or constant`;
   if (others.some((other) => other.name === name)) return `There's already a program called ${name}`;
   for (const param of params) {
-    if (!IDENTIFIER.test(param)) return `Parameter "${param}" isn't a valid name`;
+    if (!IDENTIFIER.test(param)) {
+      return `Parameter names must be names such as n or x, not "${param}". Enter the values to run with in the Run row.`;
+    }
     if (KEYWORDS.has(param)) return `Parameter ${param} is a reserved word`;
   }
   if (new Set(params).size !== params.length) return "Parameter names must be different";

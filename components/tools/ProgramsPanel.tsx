@@ -166,16 +166,20 @@ function ProgramEditor({ program, angleMode, onDirtyChange, onSave, onDelete, on
           />
         </label>
         <label className="flex items-center gap-2">
-          Parameters
+          Parameter names
           <input
             value={paramsText}
             onChange={(e) => edit(setParamsText)(e.target.value)}
-            aria-label="Parameters"
-            placeholder="a, b"
+            aria-label="Parameter names"
+            aria-describedby="params-hint"
+            placeholder="e.g. a, b"
             spellCheck={false}
             className={`${fieldClass} w-32`}
           />
         </label>
+        <p id="params-hint" className="w-full text-xs text-zinc-500">
+          Names the program uses for its inputs. Enter the values to run it with in the <strong>Run</strong> row below.
+        </p>
       </div>
 
       <textarea
@@ -237,19 +241,22 @@ function ProgramEditor({ program, angleMode, onDirtyChange, onSave, onDelete, on
         }}
         className="flex flex-wrap items-center gap-2 rounded-xl bg-zinc-50 px-3 py-2 dark:bg-zinc-950"
       >
-        <span className="font-mono text-sm">{name.trim() || "program"}(</span>
+        <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+          Run {params.length > 0 ? "with" : <span className="font-mono">{name.trim() || "program"}()</span>}
+        </span>
         {params.map((param, i) => (
-          <input
-            key={`${i}-${param}`}
-            value={args[i] ?? ""}
-            onChange={(e) => setArgs((a) => Object.assign([...a], { [i]: e.target.value }))}
-            aria-label={`Value for ${param}`}
-            placeholder={param}
-            spellCheck={false}
-            className={`${fieldClass} w-20 bg-white`}
-          />
+          <label key={`${i}-${param}`} className="flex items-center gap-1 font-mono text-sm">
+            {param} =
+            <input
+              value={args[i] ?? ""}
+              onChange={(e) => setArgs((a) => Object.assign([...a], { [i]: e.target.value }))}
+              aria-label={`Value for ${param}`}
+              placeholder="value"
+              spellCheck={false}
+              className={`${fieldClass} w-20 bg-white`}
+            />
+          </label>
         ))}
-        <span className="font-mono text-sm">)</span>
         <button type="submit" className={`${buttonClass} ml-auto bg-blue-600 text-white hover:bg-blue-700 dark:hover:bg-blue-500 border-blue-600`}>
           {dirty ? "Save & run" : "Run"}
         </button>
