@@ -404,7 +404,7 @@ export function runProgram(program: Program, args: unknown[], globals: Scope, an
 /** Marks scope entries created by programFunction. */
 const PROGRAM_FUNCTION = Symbol("program");
 
-export type ProgramFunction = ((...args: unknown[]) => unknown) & { syntax: string; [PROGRAM_FUNCTION]: true };
+export type ProgramFunction = ((...args: unknown[]) => unknown) & { syntax: string; program: Program; [PROGRAM_FUNCTION]: true };
 
 /**
  * A function that runs `program`, for use in expressions (`fib(10)`). It reads
@@ -416,7 +416,7 @@ export function programFunction(program: Program, globals: Scope, angleMode: Ang
     if (value === undefined) throw new ScriptError(`${program.name} didn't return a value`);
     return value;
   };
-  return Object.assign(fn, { syntax: `${program.name}(${program.params.join(", ")})`, [PROGRAM_FUNCTION]: true as const });
+  return Object.assign(fn, { syntax: `${program.name}(${program.params.join(", ")})`, program, [PROGRAM_FUNCTION]: true as const });
 }
 
 export function isProgramFunction(value: unknown): value is ProgramFunction {

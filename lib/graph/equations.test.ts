@@ -26,6 +26,13 @@ describe("share URL state", () => {
     });
   });
 
+  it("round-trips the 3D view and omits 2D", () => {
+    expect(encodeShareState({ equations: ["z = x y"], angleMode: "rad", view: "3d" })).toBe("eq=z+%3D+x+y&view=3d");
+    expect(decodeShareState("eq=x&view=3d")).toEqual({ equations: ["x"], view: "3d" });
+    expect(encodeShareState({ equations: ["x"], angleMode: "rad", view: "2d" })).toBe("eq=x");
+    expect(decodeShareState("eq=x&view=4d")).toEqual({ equations: ["x"] });
+  });
+
   it("omits the default radian mode", () => {
     expect(encodeShareState({ equations: ["x"], angleMode: "rad" })).toBe("eq=x");
   });

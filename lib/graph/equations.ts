@@ -45,16 +45,21 @@ export function equationName(index: number): string {
   return `y${digits}`;
 }
 
+export type GraphView = "2d" | "3d";
+
 export type ShareState = {
   equations: string[];
   angleMode: AngleMode;
+  /** Omitted from the URL when 2D. */
+  view?: GraphView;
 };
 
-/** Query string that reproduces the graph, e.g. `eq=sin(x)&eq=x%5E2&angle=deg`. */
-export function encodeShareState({ equations, angleMode }: ShareState): string {
+/** Query string that reproduces the graph, e.g. `eq=sin(x)&eq=x%5E2&angle=deg&view=3d`. */
+export function encodeShareState({ equations, angleMode, view }: ShareState): string {
   const params = new URLSearchParams();
   for (const text of equations) if (text.trim()) params.append("eq", text);
   if (angleMode !== "rad") params.set("angle", angleMode);
+  if (view === "3d") params.set("view", "3d");
   return params.toString();
 }
 
@@ -69,5 +74,7 @@ export function decodeShareState(search: string): Partial<ShareState> {
   if (equations.length > 0) result.equations = equations;
   const angle = params.get("angle");
   if (angle === "deg" || angle === "rad" || angle === "grad") result.angleMode = angle;
+  const view = params.get("view");
+  if (view === "2d" || view === "3d") result.view = view;
   return result;
 }

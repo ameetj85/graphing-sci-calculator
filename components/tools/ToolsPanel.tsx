@@ -11,7 +11,7 @@ export function ToolsPanel({ tabs }: { tabs: ToolTab[] }) {
 
   return (
     <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div role="tablist" aria-label="Tools" className="mb-4 flex gap-1 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800">
+      <div role="tablist" aria-label="Tools" className="mb-4 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-zinc-200 dark:border-zinc-800">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -21,7 +21,7 @@ export function ToolsPanel({ tabs }: { tabs: ToolTab[] }) {
             aria-selected={tab.id === current.id}
             aria-controls={`panel-${tab.id}`}
             onClick={() => setActive(tab.id)}
-            className={`-mb-px shrink-0 border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`shrink-0 border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
               tab.id === current.id
                 ? "border-blue-600 text-zinc-900 dark:border-blue-400 dark:text-zinc-50"
                 : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"

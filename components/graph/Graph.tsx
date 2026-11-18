@@ -5,7 +5,9 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatCoordinate, nearestDefinedX } from "@/lib/graph/keyPoints";
 import type { Comparison } from "@/lib/graph/plotSpec";
 import type { Point } from "@/lib/graph/sample";
-import type { AngleMode, PlotFunction } from "@/lib/math/engine";
+import type { ScopeSnapshot } from "@/lib/graph/scopeSnapshot";
+import type { AngleMode, PlotFunction, Scope } from "@/lib/math/engine";
+import { ImplicitCurve } from "./ImplicitCurve";
 import { AdaptiveGrid } from "./AdaptiveGrid";
 import { FunctionCurve } from "./FunctionCurve";
 import { InequalityRegion } from "./InequalityRegion";
@@ -36,11 +38,13 @@ export type GraphCurve = {
   color: string;
 };
 
-/** Other drawable equations: shaded inequalities and parametric/polar curves. */
+/** Other drawable equations: shaded inequalities, parametric/polar and implicit curves, data points. */
 export type GraphShape = { id: string; color: string } & (
   | { kind: "inequality"; fn: PlotFunction; op: Comparison }
   | { kind: "curve"; xy: (t: number) => Point; tMin: number; tMax: number }
   | { kind: "points"; points: Point[] }
+  /** F(x, y) = 0, traced in the plotting worker. */
+  | { kind: "implicit"; source: string }
 );
 
 const MAX_DATA_POINTS = 500;
@@ -55,10 +59,13 @@ type GraphProps = {
   onTraceMove: (x: number) => void;
   showKeyPoints: boolean;
   angleMode: AngleMode;
+  /** The calculator scope and its worker copy, for curves traced in the plotting worker. */
+  scope: Scope;
+  snapshot: ScopeSnapshot;
 };
 
 /** Fills its container: the parent decides the size, the graph measures it. */
-export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoints, angleMode }: GraphProps) {
+export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoints, angleMode, scope, snapshot }: GraphProps) {
   // Remounting Mafs is the only way to reset its internal pan/zoom state.
   const [view, setView] = useState<{ key: number; box: ViewBox }>({ key: 0, box: DEFAULT_VIEW });
   const showView = (box: ViewBox) => setView((current) => ({ key: current.key + 1, box }));
@@ -107,6 +114,18 @@ export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoi
           {shapes.map((shape) =>
             shape.kind === "curve" ? (
               <ParametricCurve key={shape.id} xy={shape.xy} tMin={shape.tMin} tMax={shape.tMax} color={shape.color} />
+            ) : null,
+          )}
+          {shapes.map((shape) =>
+            shape.kind === "implicit" ? (
+              <ImplicitCurve
+                key={shape.id}
+                source={shape.source}
+                color={shape.color}
+                scope={scope}
+                snapshot={snapshot}
+                angleMode={angleMode}
+              />
             ) : null,
           )}
           {curves.map((curve) => (
