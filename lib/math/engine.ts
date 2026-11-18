@@ -159,19 +159,29 @@ export type CompileResult =
 export function compileFunction(expr: string, scope: Scope, angleMode: AngleMode = "rad"): CompileResult {
   const source = expr.trim().replace(/^y\s*=(?!=)/, "").trim();
   if (!source) return { ok: false, error: "Enter a function of x" };
+  const result = compileIn(source, "x", scope, angleMode);
+  return result.ok ? { ...result, tex: `y = ${result.tex}` } : result;
+}
 
+/**
+ * Compiles an expression in one variable (`x`, `t`, `theta`, ...) into a
+ * numeric function, with the same rules as compileFunction. The TeX is the
+ * expression alone.
+ */
+export function compileIn(source: string, variable: string, scope: Scope, angleMode: AngleMode = "rad"): CompileResult {
+  if (!source.trim()) return { ok: false, error: `Enter an expression in ${variable}` };
   try {
     const { math, parse } = getEngine(angleMode);
     const node = parse(source);
     if (node.type === "AssignmentNode" || node.type === "FunctionAssignmentNode") {
-      return { ok: false, error: "Enter an expression in x, such as x^2 - 1" };
+      return { ok: false, error: `Enter an expression in ${variable}, such as ${variable}^2 - 1` };
     }
 
     const unknown = new Set<string>();
     node.traverse((child) => {
       if (child.type !== "SymbolNode") return;
       const name = (child as unknown as { name: string }).name;
-      if (name !== "x" && !scope.has(name) && !(name in math)) unknown.add(name);
+      if (name !== variable && !scope.has(name) && !(name in math)) unknown.add(name);
     });
     if (unknown.size > 0) {
       return { ok: false, error: `Undefined symbol${unknown.size > 1 ? "s" : ""}: ${[...unknown].join(", ")}` };
@@ -179,19 +189,21 @@ export function compileFunction(expr: string, scope: Scope, angleMode: AngleMode
 
     const compiled = node.compile();
     const local = new Map(scope);
-    const fn: PlotFunction = (x) => {
-      local.set("x", x);
+    const fn: PlotFunction = (value) => {
+      local.set(variable, value);
       try {
-        const value = compiled.evaluate(local);
-        if (typeof value === "number") return value;
-        if (typeof value === "boolean") return Number(value);
+        const result = compiled.evaluate(local);
+        if (typeof result === "number") return result;
+        if (typeof result === "boolean") return Number(result);
         return NaN;
       } catch {
         return NaN;
       }
     };
 
-    return { ok: true, fn, tex: `y = ${node.toTex({ parenthesis: "keep", implicit: "hide" })}` };
+    // KaTeX expects \theta rather than the Unicode letter.
+    const tex = node.toTex({ parenthesis: "keep", implicit: "hide" }).replaceAll("θ", "\\theta ");
+    return { ok: true, fn, tex };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

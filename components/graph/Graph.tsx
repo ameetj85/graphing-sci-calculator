@@ -3,9 +3,13 @@
 import { Mafs } from "mafs";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { nearestDefinedX } from "@/lib/graph/keyPoints";
+import type { Comparison } from "@/lib/graph/plotSpec";
+import type { Point } from "@/lib/graph/sample";
 import type { AngleMode, PlotFunction } from "@/lib/math/engine";
 import { AdaptiveGrid } from "./AdaptiveGrid";
 import { FunctionCurve } from "./FunctionCurve";
+import { InequalityRegion } from "./InequalityRegion";
+import { ParametricCurve } from "./ParametricCurve";
 import { KeyPoints } from "./KeyPoints";
 import { TracePoint } from "./TracePoint";
 
@@ -18,6 +22,7 @@ const TRIG_VIEW: Record<AngleMode, ViewBox> = {
   rad: { x: [-2 * Math.PI, 2 * Math.PI], y: [-2, 2] },
 };
 
+/** A y = f(x) curve. Only these support trace, key points and the value table. */
 export type GraphCurve = {
   id: string;
   name: string;
@@ -25,8 +30,15 @@ export type GraphCurve = {
   color: string;
 };
 
+/** Other drawable equations: shaded inequalities and parametric/polar curves. */
+export type GraphShape = { id: string; color: string } & (
+  | { kind: "inequality"; fn: PlotFunction; op: Comparison }
+  | { kind: "curve"; xy: (t: number) => Point; tMin: number; tMax: number }
+);
+
 type GraphProps = {
   curves: GraphCurve[];
+  shapes: GraphShape[];
   /** Id of the curve to trace, or null to hide the trace point. */
   traceId: string | null;
   /** x of the trace point, shared with the value table. */
@@ -37,7 +49,7 @@ type GraphProps = {
 };
 
 /** Fills its container: the parent decides the size, the graph measures it. */
-export function Graph({ curves, traceId, traceX, onTraceMove, showKeyPoints, angleMode }: GraphProps) {
+export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoints, angleMode }: GraphProps) {
   // Remounting Mafs is the only way to reset its internal pan/zoom state.
   const [view, setView] = useState<{ key: number; box: ViewBox }>({ key: 0, box: DEFAULT_VIEW });
   const showView = (box: ViewBox) => setView((current) => ({ key: current.key + 1, box }));
@@ -77,6 +89,17 @@ export function Graph({ curves, traceId, traceX, onTraceMove, showKeyPoints, ang
           zoom={{ min: 0.05, max: 20 }}
         >
           <AdaptiveGrid />
+          {/* Shaded regions first so curves draw on top of them. */}
+          {shapes.map((shape) =>
+            shape.kind === "inequality" ? (
+              <InequalityRegion key={shape.id} fn={shape.fn} op={shape.op} color={shape.color} />
+            ) : null,
+          )}
+          {shapes.map((shape) =>
+            shape.kind === "curve" ? (
+              <ParametricCurve key={shape.id} xy={shape.xy} tMin={shape.tMin} tMax={shape.tMax} color={shape.color} />
+            ) : null,
+          )}
           {curves.map((curve) => (
             <FunctionCurve key={curve.id} fn={curve.fn} color={curve.color} />
           ))}
