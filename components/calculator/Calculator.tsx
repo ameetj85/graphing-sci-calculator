@@ -27,13 +27,18 @@ import {
   type Scope,
 } from "@/lib/math/engine";
 import { ExpressionInput } from "./ExpressionInput";
+import { toExactForm } from "@/lib/math/exact";
+import { ValueTable } from "@/components/graph/ValueTable";
 import { HistoryPanel } from "./HistoryPanel";
 import { Keypad } from "./Keypad";
 
 const FLASH_MS = 120;
 const EXPRESSION_FIELD = "expression";
 const ANGLE_KEY = "gsc.angle.v1";
+const DISPLAY_KEY = "gsc.display.v1";
 const DEFAULT_EQUATIONS = ["sin(x)"];
+
+type DisplayMode = "exact" | "decimal";
 
 type Selection = { start: number; end: number };
 
@@ -49,19 +54,30 @@ function safeLocalStorage(): Storage | undefined {
 function loadInitialState() {
   const storage = safeLocalStorage();
   const shared = decodeShareState(window.location.search);
-  let savedAngle: string | null = null;
-  try {
-    savedAngle = storage?.getItem(ANGLE_KEY) ?? null;
-  } catch {
-    // Storage blocked: use the default.
-  }
-  const angleMode: AngleMode = shared.angleMode ?? (savedAngle === "deg" ? "deg" : "rad");
+  const angleMode: AngleMode = shared.angleMode ?? (readSetting(storage, ANGLE_KEY) === "deg" ? "deg" : "rad");
+  const displayMode: DisplayMode = readSetting(storage, DISPLAY_KEY) === "decimal" ? "decimal" : "exact";
 
   const equations: Equation[] = [];
   for (const [i, text] of (shared.equations ?? DEFAULT_EQUATIONS).entries()) {
     equations.push(createEquation(`e${i + 1}`, text, equations));
   }
-  return { angleMode, equations, history: loadHistory(storage) };
+  return { angleMode, displayMode, equations, history: loadHistory(storage) };
+}
+
+function readSetting(storage: Storage | undefined, key: string): string | null {
+  try {
+    return storage?.getItem(key) ?? null;
+  } catch {
+    return null; // Storage blocked: use the default.
+  }
+}
+
+function writeSetting(key: string, value: string) {
+  try {
+    safeLocalStorage()?.setItem(key, value);
+  } catch {
+    // Storage blocked: the setting lasts for this visit only.
+  }
 }
 
 function isEditable(element: EventTarget | null): boolean {
@@ -93,6 +109,9 @@ export function Calculator() {
   const [selections, setSelections] = useState<Record<string, Selection>>({});
   const nextEquationId = useRef(initial.equations.length + 1);
   const [traceId, setTraceId] = useState<string | null>(null);
+  // Shared by the graph's trace point and the value table.
+  const [traceX, setTraceX] = useState(0);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(initial.displayMode);
   const [showKeyPoints, setShowKeyPoints] = useState(true);
   const [copied, setCopied] = useState(false);
   const [xNoteDismissed, setXNoteDismissed] = useState(false);
@@ -105,6 +124,7 @@ export function Calculator() {
   const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const previewTex = useMemo(() => expressionToTex(expression.value), [expression.value]);
+  const exactForm = useMemo(() => (result?.ok ? toExactForm(result.value) : null), [result]);
 
   const compiled = useMemo(() => {
     const byId: Record<string, CompileResult> = {};
@@ -129,13 +149,8 @@ export function Calculator() {
     window.history.replaceState(window.history.state, "", query ? `?${query}` : window.location.pathname);
   }, [equations, angleMode]);
 
-  useEffect(() => {
-    try {
-      safeLocalStorage()?.setItem(ANGLE_KEY, angleMode);
-    } catch {
-      // Storage blocked: the setting lasts for this visit only.
-    }
-  }, [angleMode]);
+  useEffect(() => writeSetting(ANGLE_KEY, angleMode), [angleMode]);
+  useEffect(() => writeSetting(DISPLAY_KEY, displayMode), [displayMode]);
 
   useEffect(() => saveHistory(safeLocalStorage(), history), [history]);
 
@@ -289,9 +304,10 @@ export function Calculator() {
       : `${equationName(equations.findIndex((eq) => eq.id === activeField))}`;
 
   return (
-    <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start">
-      <div className="flex flex-col gap-6">
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    // Two rows on wide screens: calculator | graph, then history | value table.
+    // The graph card stretches to the calculator card's height.
+    <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+        <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm lg:self-start dark:border-zinc-800 dark:bg-zinc-900">
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -305,7 +321,15 @@ export function Calculator() {
               <label htmlFor="expression" className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
                 Expression
               </label>
-              <AngleModeToggle mode={angleMode} onChange={setAngleMode} />
+              <Segmented
+                label="Angle unit"
+                options={[
+                  { value: "deg", label: "DEG" },
+                  { value: "rad", label: "RAD" },
+                ]}
+                value={angleMode}
+                onChange={setAngleMode}
+              />
             </div>
             <ExpressionInput
               id="expression"
@@ -329,10 +353,28 @@ export function Calculator() {
           <div className="mt-1 mb-4 min-h-16 border-t border-zinc-200 pt-3 dark:border-zinc-800" aria-live="polite">
             {result?.ok === true && (
               <div className="flex flex-col items-end gap-1">
-                <span className="max-w-full truncate font-mono text-sm text-zinc-500">{lastExpression} =</span>
+                <div className="flex w-full items-center justify-between gap-2">
+                  {exactForm ? (
+                    <Segmented
+                      label="Result format"
+                      options={[
+                        { value: "exact", label: "Exact" },
+                        { value: "decimal", label: "Decimal" },
+                      ]}
+                      value={displayMode}
+                      onChange={setDisplayMode}
+                    />
+                  ) : (
+                    <span />
+                  )}
+                  <span className="min-w-0 truncate font-mono text-sm text-zinc-500">{lastExpression} =</span>
+                </div>
                 <span className="max-w-full overflow-x-auto text-2xl text-zinc-900 dark:text-zinc-50">
-                  <Tex tex={result.tex} />
+                  <Tex tex={exactForm && displayMode === "exact" ? exactForm.tex : result.tex} />
                 </span>
+                {exactForm && displayMode === "exact" && (
+                  <span className="font-mono text-sm text-zinc-500">≈ {result.display}</span>
+                )}
               </div>
             )}
             {result?.ok === false && (
@@ -355,18 +397,6 @@ export function Calculator() {
             </ul>
           </details>
         </section>
-
-        <HistoryPanel
-          entries={history}
-          onUseExpression={(text) => focusExpression(text)}
-          onInsertResult={(text) => {
-            setActiveField(EXPRESSION_FIELD);
-            dispatchExpression({ type: "insert", text });
-            inputs.current.get(EXPRESSION_FIELD)?.focus();
-          }}
-          onClear={() => setHistory([])}
-        />
-      </div>
 
       <section className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <EquationList
@@ -442,32 +472,76 @@ export function Calculator() {
           </div>
         )}
 
-        <Graph curves={curves} traceId={traceId} showKeyPoints={showKeyPoints} angleMode={angleMode} />
+        {/* The graph fills whatever height is left, measured by Graph itself. */}
+        <div className="relative min-h-[22rem] flex-1">
+          <div className="absolute inset-0">
+            <Graph
+              curves={curves}
+              traceId={traceId}
+              traceX={traceX}
+              onTraceMove={setTraceX}
+              showKeyPoints={showKeyPoints}
+              angleMode={angleMode}
+            />
+          </div>
+        </div>
         {showKeyPoints && curves.length > 0 && (
           <p className="text-xs text-zinc-500">Hover a dot to see a root or intersection; click it to pin its coordinates.</p>
         )}
       </section>
+
+      <div className="lg:self-start">
+        <HistoryPanel
+          entries={history}
+          onUseExpression={(text) => focusExpression(text)}
+          onInsertResult={(text) => {
+            setActiveField(EXPRESSION_FIELD);
+            dispatchExpression({ type: "insert", text });
+            inputs.current.get(EXPRESSION_FIELD)?.focus();
+          }}
+          onClear={() => setHistory([])}
+        />
+      </div>
+
+      <div className="lg:self-start">
+        <ValueTable
+          curves={curves}
+          angleMode={angleMode}
+          traceX={traceId ? traceX : null}
+          onSelectX={(x) => {
+            setTraceX(x);
+            if (!traceId && curves.length > 0) setTraceId(curves[0].id);
+          }}
+        />
+      </div>
     </div>
   );
 }
 
-function AngleModeToggle({ mode, onChange }: { mode: AngleMode; onChange: (mode: AngleMode) => void }) {
+type SegmentedProps<T extends string> = {
+  label: string;
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+};
+
+function Segmented<T extends string>({ label, options, value, onChange }: SegmentedProps<T>) {
   return (
-    <div role="radiogroup" aria-label="Angle unit" className="flex rounded-lg bg-zinc-100 p-0.5 text-xs font-semibold dark:bg-zinc-800">
-      {(["deg", "rad"] as const).map((option) => (
+    <div role="radiogroup" aria-label={label} className="flex rounded-lg bg-zinc-100 p-0.5 text-xs font-semibold dark:bg-zinc-800">
+      {options.map((option) => (
         <button
-          key={option}
+          key={option.value}
           type="button"
           role="radio"
-          aria-checked={mode === option}
-          onClick={() => onChange(option)}
-          className={`rounded-md px-2.5 py-1 uppercase transition-colors ${
-            mode === option
+          aria-checked={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={`rounded-md px-2.5 py-1 transition-colors ${
+            value === option.value
               ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-600 dark:text-white"
               : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
           }`}
         >
-          {option}
+          {option.label}
         </button>
       ))}
     </div>
