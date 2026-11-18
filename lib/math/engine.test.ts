@@ -35,6 +35,14 @@ describe("evaluateExpression", () => {
     expect(evalOk("pi r^2", scope).display).toBe("12.5663706144");
   });
 
+  it("evaluates semicolon-separated statements and shows the last result", () => {
+    const scope = createScope();
+    expect(evalOk("r = 2; pi r^2", scope).display).toBe("12.5663706144");
+    expect(evalOk("ans", scope).display).toBe("12.5663706144");
+    expect(evaluateExpression("a = 1;", scope).ok).toBe(false);
+    expect(evalOk("a + 1", scope).display).toBe("2");
+  });
+
   it("supports user-defined functions", () => {
     const scope = createScope();
     evalOk("f(x) = x^2 + 1", scope);

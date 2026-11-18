@@ -7,7 +7,8 @@ export default function Home() {
         <h1 className="text-2xl font-semibold tracking-tight">Graphing Scientific Calculator</h1>
         <p className="text-sm text-zinc-500">
           Type an expression and press Enter. Define variables with <code>a = 3</code> or functions with{" "}
-          <code>f(x) = x^2</code>; the last result is available as <code>ans</code>.
+          <code>f(x) = x^2</code>; the last result is available as <code>ans</code>. Separate multiple statements
+          with <code>;</code>, as in <code>r = 2; pi r^2</code>.
         </p>
       </header>
       <Calculator />

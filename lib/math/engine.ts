@@ -61,13 +61,24 @@ export function evaluateExpression(expr: string, scope: Scope): EvalResult {
 
   try {
     const node = parse(source);
-    const value = node.compile().evaluate(scope);
+    let value = node.compile().evaluate(scope);
+    // Multiple statements (`r = 2; pi r^2`) return a ResultSet; show the last
+    // visible result. A trailing `;` hides a statement's result.
+    if (isResultSet(value)) value = value.entries.at(-1);
     if (value === undefined) return { ok: false, error: "No result" };
     if (typeof value !== "function") scope.set("ans", value);
     return { ok: true, value, display: formatValue(value), tex: resultToTex(value) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+function isResultSet(value: unknown): value is { entries: unknown[] } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { isResultSet?: boolean }).isResultSet === true
+  );
 }
 
 /** Converts an expression to TeX, or returns null if it does not parse yet. */
