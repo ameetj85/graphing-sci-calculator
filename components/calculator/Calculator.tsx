@@ -95,6 +95,7 @@ export function Calculator() {
   const [traceId, setTraceId] = useState<string | null>(null);
   const [showKeyPoints, setShowKeyPoints] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [xNoteDismissed, setXNoteDismissed] = useState(false);
 
   const [history, setHistory] = useState<HistoryEntry[]>(initial.history);
   const [result, setResult] = useState<EvalResult | null>(null);
@@ -201,6 +202,13 @@ export function Calculator() {
     if (evaluated.ok) {
       setHistory((entries) => addHistoryEntry(entries, { expression: source, result: evaluated.display, at: Date.now() }));
     }
+  }
+
+  /** Deletes the calculator variable `x`, which the graph cannot use anyway. */
+  function removeCalculatorX() {
+    scopeRef.current.delete("x");
+    setGraphScope(new Map(scopeRef.current));
+    setXNoteDismissed(false); // show the note again if x is redefined later
   }
 
   function runAction(action: KeyAction) {
@@ -409,12 +417,29 @@ export function Calculator() {
           </button>
         </div>
 
-        {graphScope.has("x") && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-            In the graph, <code>x</code> is the horizontal axis, so the calculator&apos;s <code>x</code> isn&apos;t used here.
-            To evaluate at a specific x, type the function (for example <code>cos(x)</code>) in the Expression input. Other
-            variables, such as <code>a</code> in <code>a cos(x)</code>, do apply to the graph.
-          </p>
+        {graphScope.has("x") && !xNoteDismissed && (
+          <div className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            <p className="flex-1">
+              In the graph, <code>x</code> is the horizontal axis, so the calculator&apos;s <code>x</code> isn&apos;t used here.
+              To evaluate at a specific x, type the function (for example <code>cos(x)</code>) in the Expression input.
+              Other variables, such as <code>a</code> in <code>a cos(x)</code>, do apply to the graph.
+            </p>
+            <button
+              type="button"
+              onClick={removeCalculatorX}
+              className="shrink-0 rounded-md border border-amber-300 px-2 py-0.5 font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/50"
+            >
+              Remove x
+            </button>
+            <button
+              type="button"
+              onClick={() => setXNoteDismissed(true)}
+              aria-label="Dismiss note"
+              className="shrink-0 rounded-md px-1.5 text-base leading-none hover:bg-amber-100 dark:hover:bg-amber-900/50"
+            >
+              ×
+            </button>
+          </div>
         )}
 
         <Graph curves={curves} traceId={traceId} showKeyPoints={showKeyPoints} angleMode={angleMode} />
