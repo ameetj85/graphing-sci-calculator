@@ -1,5 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { createScope, evaluateExpression, expressionToTex } from "./engine";
+import { compileFunction, createScope, evaluateExpression, expressionToTex } from "./engine";
+
+function compileOk(expr: string, scope = createScope()) {
+  const result = compileFunction(expr, scope);
+  if (!result.ok) throw new Error(`expected "${expr}" to compile: ${result.error}`);
+  return result.fn;
+}
+
+describe("compileFunction", () => {
+  it("compiles an expression in x, with or without a leading y =", () => {
+    expect(compileOk("x^2 - 1")(3)).toBe(8);
+    expect(compileOk("y = 2x + 1")(2)).toBe(5);
+    expect(compileOk("sin(x)")(Math.PI / 2)).toBe(1);
+  });
+
+  it("returns NaN where the function is undefined or not real", () => {
+    expect(compileOk("sqrt(x)")(-1)).toBeNaN();
+    expect(compileOk("log(x)")(-2)).toBeNaN();
+  });
+
+  it("uses variables and functions from the scope", () => {
+    const scope = createScope();
+    evaluateExpression("a = 3", scope);
+    evaluateExpression("f(t) = t^2", scope);
+    expect(compileOk("a f(x)", scope)(2)).toBe(12);
+  });
+
+  it("does not change the caller's scope", () => {
+    const scope = createScope();
+    compileOk("x + 1", scope)(5);
+    expect(scope.has("x")).toBe(false);
+  });
+
+  it("reports undefined symbols, assignments and syntax errors", () => {
+    const scope = createScope();
+    const undefinedSymbol = compileFunction("k x", scope);
+    expect(undefinedSymbol.ok === false && undefinedSymbol.error).toBe("Undefined symbol: k");
+    expect(compileFunction("a = x", scope).ok).toBe(false);
+    expect(compileFunction("x +", scope).ok).toBe(false);
+    expect(compileFunction("y = ", scope).ok).toBe(false);
+  });
+});
 
 function evalOk(expr: string, scope = createScope()) {
   const result = evaluateExpression(expr, scope);
