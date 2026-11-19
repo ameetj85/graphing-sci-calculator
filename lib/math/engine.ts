@@ -22,6 +22,11 @@ const TRIG_NOISE = 1e-15;
 const snapNoise = (result: number, input: number) =>
   Math.abs(result) < TRIG_NOISE && Math.abs(input) > 1e-6 ? 0 : result;
 
+type UnitValue = { isUnit: true; equalBase: (other: unknown) => boolean; formatUnits: () => string };
+
+const isUnit = (value: unknown): value is UnitValue =>
+  typeof value === "object" && value !== null && (value as { isUnit?: boolean }).isUnit === true;
+
 /** True when `angle` is an exact multiple of `step` plus `offset`. */
 const isMultiple = (angle: number, step: number, offset = 0) => Number.isInteger((angle - offset) / step);
 
@@ -40,17 +45,30 @@ function trigFunctions(math: MathJsInstance, mode: AngleMode) {
   const toRad = (x: number) => (x * Math.PI) / half;
   const fromRad = (value: unknown) => (exact && typeof value === "number" ? (value * half) / Math.PI : value);
 
+  // Math.js names the wrong function ("cot") when sin, cos or tan get a unit
+  // that isn't an angle, so check here and say what went wrong.
+  const radian = math.unit(1, "rad");
+  const checkAngle = (name: string, x: unknown) => {
+    if (!isUnit(x) || x.equalBase(radian)) return;
+    const units = x.formatUnits();
+    const hint = /rad|deg|grad/.test(units) ? `; write (pi/6) rad, not pi/6 rad, which means pi / (6 rad)` : "";
+    throw new Error(`${name} needs an angle, such as 30 deg, but got a value in ${units}${hint}`);
+  };
+
   const wrappedSin = (x: unknown) => {
+    checkAngle("sin", x);
     if (typeof x !== "number") return sin(x as number);
     if (exact && isMultiple(x, half)) return 0;
     return snapNoise(Math.sin(toRad(x)), x);
   };
   const wrappedCos = (x: unknown) => {
+    checkAngle("cos", x);
     if (typeof x !== "number") return cos(x as number);
     if (exact && isMultiple(x, half, half / 2)) return 0;
     return snapNoise(Math.cos(toRad(x)), x);
   };
   const wrappedTan = (x: unknown) => {
+    checkAngle("tan", x);
     if (typeof x !== "number") return tan(x as number);
     if (exact && isMultiple(x, half)) return 0;
     if (exact && isMultiple(x, half, half / 2)) throw new Error(`tan is undefined at ${x}${ANGLE_SYMBOL[mode]}`);
