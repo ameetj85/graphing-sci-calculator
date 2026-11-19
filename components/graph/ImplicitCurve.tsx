@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_LINE_STYLE, LINE_WIDTH_PX, dashArray, type LineStyle } from "@/lib/graph/equations";
 import { usePaneContext } from "mafs";
 import { useMemo } from "react";
 import { segmentsPath } from "@/lib/graph/implicit";
@@ -16,6 +17,7 @@ type ImplicitCurveProps = {
   /** F in F(x, y) = 0. */
   source: string;
   color: string;
+  style?: LineStyle;
   scope: Scope;
   snapshot: ScopeSnapshot;
   angleMode: AngleMode;
@@ -26,7 +28,7 @@ type ImplicitCurveProps = {
  * plotting worker; while panning, the previous trace stays in place (it is in
  * graph coordinates) until the new one arrives. Must be rendered inside <Mafs>.
  */
-export function ImplicitCurve({ source, color, scope, snapshot, angleMode }: ImplicitCurveProps) {
+export function ImplicitCurve({ source, color, style = DEFAULT_LINE_STYLE, scope, snapshot, angleMode }: ImplicitCurveProps) {
   const { xPaneRange, yPaneRange } = usePaneContext();
   const [xMin, xMax] = xPaneRange;
   const [yMin, yMax] = yPaneRange;
@@ -42,7 +44,8 @@ export function ImplicitCurve({ source, color, scope, snapshot, angleMode }: Imp
     <path
       d={path}
       fill="none"
-      strokeWidth={2.5}
+      strokeWidth={LINE_WIDTH_PX[style.width]}
+      strokeDasharray={dashArray(style)}
       strokeLinecap="round"
       data-implicit=""
       style={{ stroke: color, vectorEffect: "non-scaling-stroke", transform: "var(--mafs-view-transform)" }}

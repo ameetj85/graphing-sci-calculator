@@ -14,13 +14,16 @@ import { EMPTY_EDITOR, editorReducer, type EditorAction, type EditorState } from
 import { addHistoryEntry, loadHistory, saveHistory, type HistoryEntry } from "@/lib/calculator/history";
 import { KEYBOARD_TO_KEY, type KeyAction } from "@/lib/calculator/keys";
 import {
+  DEFAULT_GRAPH_SETTINGS,
   MAX_EQUATIONS,
   createEquation,
   decodeShareState,
   encodeShareState,
   equationName,
   type Equation,
+  type GraphSettings,
   type GraphView,
+  type LookChange,
 } from "@/lib/graph/equations";
 import {
   createScope,
@@ -90,11 +93,13 @@ function loadInitialState() {
 
   const equations: Equation[] = [];
   for (const [i, text] of (shared.equations ?? DEFAULT_EQUATIONS).entries()) {
-    equations.push(createEquation(`e${i + 1}`, text, equations));
+    const equation = createEquation(`e${i + 1}`, text, equations);
+    equations.push({ ...equation, ...shared.looks?.[i] });
   }
   return {
     angleMode,
     view: shared.view ?? "2d",
+    graphSettings: { ...DEFAULT_GRAPH_SETTINGS, ...shared.settings },
     displayMode,
     equations,
     history: loadHistory(storage),
@@ -159,6 +164,7 @@ export function Calculator() {
   const [activeField, setActiveField] = useState<string>(EXPRESSION_FIELD);
 
   const [equations, setEquations] = useState<Equation[]>(initial.equations);
+  const [graphSettings, setGraphSettings] = useState<GraphSettings>(initial.graphSettings);
   const [selections, setSelections] = useState<Record<string, Selection>>({});
   const nextEquationId = useRef(initial.equations.length + 1);
   const [traceId, setTraceId] = useState<string | null>(null);
@@ -207,12 +213,14 @@ export function Calculator() {
       const result = compiled[eq.id];
       if (!eq.visible || !result.ok) return;
       const { spec } = result;
-      if (spec.kind === "function") curves.push({ id: eq.id, name: equationName(index), fn: spec.fn, source: spec.source, color: eq.color });
-      else if (spec.kind === "inequality") shapes.push({ id: eq.id, color: eq.color, kind: "inequality", fn: spec.fn, op: spec.op });
-      else if (spec.kind === "implicit") shapes.push({ id: eq.id, color: eq.color, kind: "implicit", source: spec.source });
-      else if (spec.kind === "region") shapes.push({ id: eq.id, color: eq.color, kind: "region", conditions: spec.conditions });
+      const look = { id: eq.id, color: eq.color, style: eq.style };
+      if (spec.kind === "function") curves.push({ ...look, name: equationName(index), fn: spec.fn, source: spec.source });
+      else if (spec.kind === "inequality") shapes.push({ ...look, kind: "inequality", fn: spec.fn, op: spec.op });
+      else if (spec.kind === "implicit") shapes.push({ ...look, kind: "implicit", source: spec.source });
+      else if (spec.kind === "region") shapes.push({ ...look, kind: "region", conditions: spec.conditions });
+      else if (spec.kind === "field") shapes.push({ ...look, kind: "field", fn: spec.fn, slope: spec.slope });
       else if (spec.kind === "surface") surfaces.push({ id: eq.id, name: equationName(index), source: spec.source, color: eq.color });
-      else shapes.push({ id: eq.id, color: eq.color, kind: "curve", xy: spec.xy, tMin: spec.tMin, tMax: spec.tMax });
+      else shapes.push({ ...look, kind: "curve", xy: spec.xy, tMin: spec.tMin, tMax: spec.tMax });
     });
     if (plotData) {
       const xs = parseList(data.l1).values;
@@ -225,9 +233,15 @@ export function Calculator() {
 
   // Keep the URL shareable and remember settings and history.
   useEffect(() => {
-    const query = encodeShareState({ equations: equations.map((eq) => eq.text), angleMode, view });
+    const query = encodeShareState({
+      equations: equations.map((eq) => eq.text),
+      angleMode,
+      view,
+      looks: equations.map((eq) => ({ color: eq.color, style: eq.style })),
+      settings: graphSettings,
+    });
     window.history.replaceState(window.history.state, "", query ? `?${query}` : window.location.pathname);
-  }, [equations, angleMode, view]);
+  }, [equations, angleMode, view, graphSettings]);
 
   useEffect(() => writeSetting(ANGLE_KEY, angleMode), [angleMode]);
   useEffect(() => writeSetting(DISPLAY_KEY, displayMode), [displayMode]);
@@ -348,6 +362,21 @@ export function Calculator() {
     setEquations((eqs) => eqs.filter((eq) => eq.id !== id));
     if (activeField === id) setActiveField(EXPRESSION_FIELD);
     if (traceId === id) setTraceId(null);
+  }
+
+  /** Applies a style picker change on top of the equation's current look. */
+  function setEquationLook(id: string, change: LookChange) {
+    setEquations((eqs) =>
+      eqs.map((eq) =>
+        eq.id === id
+          ? {
+              ...eq,
+              color: change.color ?? eq.color,
+              style: { dash: change.dash ?? eq.style.dash, width: change.width ?? eq.style.width },
+            }
+          : eq,
+      ),
+    );
   }
 
   function toggleEquation(id: string) {
@@ -586,6 +615,7 @@ export function Calculator() {
           registerInput={registerInput}
           onFocus={setActiveField}
           onToggleVisible={toggleEquation}
+          onLookChange={setEquationLook}
           onRemove={removeEquation}
           onAdd={() => addEquation()}
           view={view}
@@ -698,6 +728,8 @@ export function Calculator() {
                 angleMode={angleMode}
                 scope={graphScope}
                 snapshot={snapshot}
+                settings={graphSettings}
+                onSettingsChange={setGraphSettings}
               />
             )}
           </div>

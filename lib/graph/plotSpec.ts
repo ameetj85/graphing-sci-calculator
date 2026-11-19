@@ -8,6 +8,8 @@
  *   (cos(t), sin(t))      parametric curve
  *   x^2 + y^2 = 4         implicit curve (traced in the plotting worker)
  *   z = sin(x) cos(y)     3D surface (shown in the 3D view)
+ *   dy/dx = x - y         slope field
+ *   field(-y, x)          vector field
  *
  * Polar and parametric curves may end with a range such as {0 <= t <= 4pi};
  * otherwise t (or θ) runs over one full turn in the current angle mode.
@@ -24,6 +26,7 @@ import {
 } from "@/lib/math/engine";
 import { toExactForm } from "@/lib/math/exact";
 import { formatCoordinate } from "./keyPoints";
+import type { FieldFn } from "./field";
 import type { Point } from "./sample";
 
 export type Comparison = "<" | "<=" | ">" | ">=";
@@ -49,12 +52,16 @@ export type PlotSpec =
    */
   | { kind: "region"; conditions: RegionCondition[]; tex: string }
   /** z = f(x, y). `source` is f. */
-  | { kind: "surface"; source: string; tex: string };
+  | { kind: "surface"; source: string; tex: string }
+  /** dy/dx = f(x, y) (slope: true) or field(P, Q): fn gives the vector at (x, y). */
+  | { kind: "field"; slope: boolean; fn: FieldFn; tex: string };
 
 export type PlotResult = { ok: true; spec: PlotSpec } | { ok: false; error: string };
 
 const RANGE_SUFFIX = /\{\s*([^{}]+?)\s*(<=|≤|<)\s*(t|theta|θ)\s*(<=|≤|<)\s*([^{}]+?)\s*\}\s*$/;
 const POLAR = /^r\s*=(?!=)\s*([\s\S]*)$/;
+const SLOPE_FIELD = /^dy\s*\/\s*dx\s*=(?!=)\s*([\s\S]+)$/;
+const VECTOR_FIELD = /^field\s*(\([\s\S]*\))$/;
 const Y_FIRST = /^y\s*(<=|>=|≤|≥|<|>)(?!=)\s*([\s\S]+)$/;
 const Y_LAST = /^([\s\S]+?)\s*(<=|>=|≤|≥|<|>)\s*y$/;
 
@@ -242,6 +249,38 @@ export function compilePlot(text: string, scope: Scope, angleMode: AngleMode): P
   }
 
   if (range) return { ok: false, error: "A {…} range applies to polar r = … and parametric (x(t), y(t)) curves" };
+
+  // Slope field dy/dx = f(x, y) and vector field field(P, Q).
+  const slopeField = body.match(SLOPE_FIELD);
+  if (slopeField) {
+    const f = compileInVariables(slopeField[1], ["x", "y"], scope, angleMode);
+    if (!f.ok) return f;
+    return {
+      ok: true,
+      spec: { kind: "field", slope: true, fn: (x, y) => [1, f.fn(x, y)], tex: `\\frac{dy}{dx} = ${f.tex}` },
+    };
+  }
+  const vectorField = body.match(VECTOR_FIELD);
+  if (vectorField) {
+    const fieldArgs = unwrapParens(vectorField[1]);
+    const parts = fieldArgs === null ? [] : splitTopLevel(fieldArgs);
+    if (parts.length !== 2 || !parts[0] || !parts[1]) {
+      return { ok: false, error: "A vector field has two parts: field(P(x, y), Q(x, y))" };
+    }
+    const p = compileInVariables(parts[0], ["x", "y"], scope, angleMode);
+    if (!p.ok) return p;
+    const q = compileInVariables(parts[1], ["x", "y"], scope, angleMode);
+    if (!q.ok) return q;
+    return {
+      ok: true,
+      spec: {
+        kind: "field",
+        slope: false,
+        fn: (x, y) => [p.fn(x, y), q.fn(x, y)],
+        tex: `\\vec{F} = \\left\\langle ${p.tex},\\ ${q.tex} \\right\\rangle`,
+      },
+    };
+  }
 
   const equation = splitEquation(body);
   if (equation) {

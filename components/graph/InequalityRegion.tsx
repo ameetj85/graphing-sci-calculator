@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_LINE_STYLE, LINE_WIDTH_PX, dashArray, type LineStyle } from "@/lib/graph/equations";
 import { usePaneContext } from "mafs";
 import { useMemo } from "react";
 import type { Comparison } from "@/lib/graph/plotSpec";
@@ -11,6 +12,7 @@ type InequalityRegionProps = {
   fn: (x: number) => number;
   op: Comparison;
   color: string;
+  style?: LineStyle;
 };
 
 /**
@@ -18,7 +20,7 @@ type InequalityRegionProps = {
  * The boundary is dashed for strict inequalities (< and >) and solid
  * otherwise, as in textbooks. Must be rendered inside <Mafs>.
  */
-export function InequalityRegion({ fn, op, color }: InequalityRegionProps) {
+export function InequalityRegion({ fn, op, color, style = DEFAULT_LINE_STYLE }: InequalityRegionProps) {
   const { xPaneRange, yPaneRange } = usePaneContext();
   const [xMin, xMax] = xPaneRange;
   const [yMin, yMax] = yPaneRange;
@@ -40,9 +42,9 @@ export function InequalityRegion({ fn, op, color }: InequalityRegionProps) {
       <path
         d={boundary}
         fill="none"
-        strokeWidth={2.5}
+        strokeWidth={LINE_WIDTH_PX[style.width]}
         strokeLinecap="round"
-        strokeDasharray={strict ? "8 6" : undefined}
+        strokeDasharray={dashArray(strict ? { ...style, dash: "dashed" } : style)}
         style={{ stroke: color, vectorEffect: "non-scaling-stroke", transform }}
       />
     </>

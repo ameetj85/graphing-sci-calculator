@@ -17,6 +17,15 @@ describe("equationIdentifiers", () => {
   it("skips exponents in numbers but keeps implied multiplication", () => {
     expect(equationIdentifiers(["2e3 x + 1.5E-2 + 2k"]).map((i) => i.name)).toEqual(["x", "k"]);
   });
+
+  it("ignores the dy/dx of a slope field and the field() call", () => {
+    expect(equationIdentifiers(["dy/dx = k x", "field(-y, a)"]).filter((i) => !i.called).map((i) => i.name)).toEqual([
+      "k",
+      "x",
+      "y",
+      "a",
+    ]);
+  });
 });
 
 describe("sliderVariables", () => {

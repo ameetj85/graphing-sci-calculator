@@ -25,6 +25,21 @@ describe("compilePlot", () => {
     expect(spec("(x+1)*(x-1)").kind).toBe("function");
   });
 
+  it("recognizes slope and vector fields", () => {
+    const slope = spec("dy/dx = x - y");
+    expect(slope.kind === "field" && slope.slope).toBe(true);
+    expect(slope.kind === "field" && slope.fn(3, 1)).toEqual([1, 2]);
+    expect(spec("dy / dx=y^2").kind).toBe("field");
+
+    const vector = spec("field(-y, x)");
+    expect(vector.kind === "field" && vector.slope).toBe(false);
+    expect(vector.kind === "field" && vector.fn(1, 2)).toEqual([-2, 1]);
+
+    expect(error("field(x)")).toBe("A vector field has two parts: field(P(x, y), Q(x, y))");
+    expect(error("field(x, y, 1)")).toMatch(/two parts/);
+    expect(error("dy/dx = k x")).toBe("Undefined symbol: k");
+  });
+
   it("recognizes inequalities in either order", () => {
     const above = spec("y > x^2");
     expect(above.kind === "inequality" && above.op).toBe(">");

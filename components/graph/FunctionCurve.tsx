@@ -6,6 +6,7 @@ import { isWorkerWarm } from "@/lib/graph/plotClient";
 import { computeJob, type PlotJob } from "@/lib/graph/plotJobs";
 import type { ScopeSnapshot } from "@/lib/graph/scopeSnapshot";
 import type { AngleMode, Scope } from "@/lib/math/engine";
+import { DEFAULT_LINE_STYLE, LINE_WIDTH_PX, dashArray, type LineStyle } from "@/lib/graph/equations";
 import { usePlotJob } from "./usePlotJob";
 
 const SAMPLES = 1200;
@@ -14,7 +15,7 @@ type FunctionCurveProps = {
   /** f in y = f(x). */
   source: string;
   color?: string;
-  weight?: number;
+  style?: LineStyle;
   scope: Scope;
   snapshot: ScopeSnapshot;
   angleMode: AngleMode;
@@ -28,7 +29,7 @@ type FunctionCurveProps = {
  * new path is computed the previous one stays (it is in graph coordinates).
  * Must be inside <Mafs>.
  */
-export function FunctionCurve({ source, color = "var(--mafs-blue)", weight = 2.5, scope, snapshot, angleMode }: FunctionCurveProps) {
+export function FunctionCurve({ source, color = "var(--mafs-blue)", style = DEFAULT_LINE_STYLE, scope, snapshot, angleMode }: FunctionCurveProps) {
   const { xPaneRange, yPaneRange } = usePaneContext();
   const [xMin, xMax] = xPaneRange;
   const [yMin, yMax] = yPaneRange;
@@ -47,7 +48,8 @@ export function FunctionCurve({ source, color = "var(--mafs-blue)", weight = 2.5
     <path
       d={path}
       fill="none"
-      strokeWidth={weight}
+      strokeWidth={LINE_WIDTH_PX[style.width]}
+      strokeDasharray={dashArray(style)}
       strokeLinecap="round"
       strokeLinejoin="round"
       style={{

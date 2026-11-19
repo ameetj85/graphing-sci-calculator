@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_LINE_STYLE, LINE_WIDTH_PX, dashArray, type LineStyle } from "@/lib/graph/equations";
 import { usePaneContext } from "mafs";
 import { useMemo } from "react";
 import type { PlotJob } from "@/lib/graph/plotJobs";
@@ -15,6 +16,7 @@ type ImplicitRegionProps = {
   /** Every condition F(x, y) op 0 must hold, e.g. two for 1 < x < 2. */
   conditions: RegionCondition[];
   color: string;
+  style?: LineStyle;
   scope: Scope;
   snapshot: ScopeSnapshot;
   angleMode: AngleMode;
@@ -26,7 +28,7 @@ type ImplicitRegionProps = {
  * is drawn only where it borders the region: dashed for < and >, solid for
  * <= and >=. Must be rendered inside <Mafs>.
  */
-export function ImplicitRegion({ conditions, color, scope, snapshot, angleMode }: ImplicitRegionProps) {
+export function ImplicitRegion({ conditions, color, style = DEFAULT_LINE_STYLE, scope, snapshot, angleMode }: ImplicitRegionProps) {
   const { xPaneRange, yPaneRange } = usePaneContext();
   const [xMin, xMax] = xPaneRange;
   const [yMin, yMax] = yPaneRange;
@@ -48,9 +50,9 @@ export function ImplicitRegion({ conditions, color, scope, snapshot, angleMode }
           d={boundary.path}
           data-region-boundary=""
           fill="none"
-          strokeWidth={2.5}
+          strokeWidth={LINE_WIDTH_PX[style.width]}
           strokeLinecap="round"
-          strokeDasharray={boundary.strict ? "8 6" : undefined}
+          strokeDasharray={dashArray(boundary.strict ? { ...style, dash: "dashed" } : style)}
           style={{ stroke: color, vectorEffect: "non-scaling-stroke", transform }}
         />
       ))}
