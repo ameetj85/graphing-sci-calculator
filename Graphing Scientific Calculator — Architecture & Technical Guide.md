@@ -285,7 +285,7 @@ The URL is updated with `history.replaceState` whenever equations, angle mode or
 | `npm test` | Vitest, all suites once (`npm run test:watch` to watch) |
 | `npx vitest run lib/math/engine.test.ts -t "name"` | One file or one test |
 
-**Unit tests.** About 200 Vitest tests in 20 files, all under `lib/`. They cover the engine (25), interpreter (25), statistics (19), graphing limitations (17), 3D (16), regions (16), sampling (11) and chained inequalities (10), among others. No `Worker` exists in Vitest, so plot jobs run through the main-thread path. There are no React component tests. Run Vitest from PowerShell: under Git Bash every suite fails with "Cannot read properties of undefined (reading 'config')" because of drive-letter casing.
+**Unit tests.** 180 Vitest tests in 20 files, all under `lib/`. The largest suites cover the engine (26), interpreter (23), graphing limitations (13), 3D (13), regions (12), sampling (11), statistics (10) and chained inequalities (8). No `Worker` exists in Vitest, so plot jobs run through the main-thread path. There are no React component tests. Run Vitest from PowerShell: under Git Bash every suite fails with "Cannot read properties of undefined (reading 'config')" because of drive-letter casing.
 
 **Browser checks.** UI behaviour is verified by running `next start` and driving headless Edge over the Chrome DevTools Protocol with Node's built-in `WebSocket`. Use a fresh `--user-data-dir` per run (saved history and angle mode carry over), and call `Page.bringToFront` and `Emulation.setFocusEmulationEnabled` after every navigation; a hidden tab pauses `ResizeObserver`, so the graph never gets a height.
 
