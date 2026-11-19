@@ -35,6 +35,8 @@ export type GraphCurve = {
   id: string;
   name: string;
   fn: PlotFunction;
+  /** f in y = f(x), sampled in the plotting worker. */
+  source: string;
   color: string;
 };
 
@@ -87,7 +89,7 @@ export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoi
     [traced, traceX],
   );
 
-  const keyPointCurves = useMemo(() => curves.map(({ id, fn }) => ({ id, fn })), [curves]);
+  const keyPointCurves = useMemo(() => curves.map(({ id, source }) => ({ id, source })), [curves]);
   const names = useMemo(() => Object.fromEntries(curves.map((c) => [c.id, c.name])), [curves]);
 
   return (
@@ -129,7 +131,14 @@ export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoi
             ) : null,
           )}
           {curves.map((curve) => (
-            <FunctionCurve key={curve.id} fn={curve.fn} color={curve.color} />
+            <FunctionCurve
+              key={curve.id}
+              source={curve.source}
+              color={curve.color}
+              scope={scope}
+              snapshot={snapshot}
+              angleMode={angleMode}
+            />
           ))}
           {shapes.map((shape) =>
             shape.kind === "points"
@@ -144,7 +153,7 @@ export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoi
                 ))
               : null,
           )}
-          {showKeyPoints && curves.length > 0 && <KeyPoints curves={keyPointCurves} names={names} />}
+          {showKeyPoints && curves.length > 0 && <KeyPoints curves={keyPointCurves} names={names} scope={scope} snapshot={snapshot} angleMode={angleMode} />}
           {traced && tracePointX !== null && (
             <TracePoint fn={traced.fn} x={tracePointX} color={traced.color} onMove={onTraceMove} />
           )}

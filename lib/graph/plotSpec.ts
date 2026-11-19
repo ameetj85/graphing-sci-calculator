@@ -29,7 +29,8 @@ import type { Point } from "./sample";
 export type Comparison = "<" | "<=" | ">" | ">=";
 
 export type PlotSpec =
-  | { kind: "function"; fn: (x: number) => number; tex: string }
+  /** y = f(x). `source` is f, for sampling in the plotting worker. */
+  | { kind: "function"; fn: (x: number) => number; source: string; tex: string }
   | { kind: "inequality"; fn: (x: number) => number; op: Comparison; tex: string }
   | {
       kind: "parametric" | "polar";
@@ -235,5 +236,7 @@ export function compilePlot(text: string, scope: Scope, angleMode: AngleMode): P
   }
 
   const f = compileFunction(body, scope, angleMode);
-  return f.ok ? { ok: true, spec: { kind: "function", fn: f.fn, tex: f.tex } } : f;
+  if (!f.ok) return f;
+  const source = body.replace(/^y\s*=(?!=)/, "").trim();
+  return { ok: true, spec: { kind: "function", fn: f.fn, source, tex: f.tex } };
 }

@@ -3,7 +3,11 @@
  * Plotting worker: samples surfaces and traces implicit curves off the main
  * thread, so typing, panning and the keypad stay responsive.
  */
+import { MAX_STEPS_WORKER, setBackgroundStepLimit } from "@/lib/script/interpreter";
 import { computeJob, transferables, type PlotJob, type PlotJobResult } from "./plotJobs";
+
+// Programs in graphs may run longer here than on the main thread.
+setBackgroundStepLimit(MAX_STEPS_WORKER);
 
 type Request = { id: number; job: PlotJob };
 

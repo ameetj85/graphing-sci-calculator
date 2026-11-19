@@ -2,12 +2,20 @@
 
 import { Point, Text, usePaneContext } from "mafs";
 import { useMemo, useState } from "react";
-import { findKeyPoints, formatCoordinate, type Curve, type KeyPoint } from "@/lib/graph/keyPoints";
+import { formatCoordinate, type KeyPoint } from "@/lib/graph/keyPoints";
+import type { PlotJob } from "@/lib/graph/plotJobs";
+import type { ScopeSnapshot } from "@/lib/graph/scopeSnapshot";
+import type { AngleMode, Scope } from "@/lib/math/engine";
+import { usePlotJob } from "./usePlotJob";
 
 type KeyPointsProps = {
-  curves: Curve[];
+  /** Function curves by id, with f from y = f(x). */
+  curves: { id: string; source: string }[];
   /** Display names by curve id, e.g. "y₁". */
   names: Record<string, string>;
+  scope: Scope;
+  snapshot: ScopeSnapshot;
+  angleMode: AngleMode;
 };
 
 const pointKey = (p: KeyPoint) => `${p.kind}:${p.curveIds.join(",")}:${p.x.toFixed(9)}`;
@@ -20,16 +28,22 @@ function describe(p: KeyPoint, names: Record<string, string>): string {
 }
 
 /**
- * Marks roots and intersections of the visible curves. Hovering a point shows
- * its coordinates; clicking it pins a label. Must be rendered inside <Mafs>.
+ * Marks roots and intersections of the visible curves, found in the plotting
+ * worker. Hovering a point shows its coordinates; clicking it pins a label.
+ * Must be rendered inside <Mafs>.
  */
-export function KeyPoints({ curves, names }: KeyPointsProps) {
+export function KeyPoints({ curves, names, scope, snapshot, angleMode }: KeyPointsProps) {
   const { xPaneRange, yPaneRange } = usePaneContext();
   const [xMin, xMax] = xPaneRange;
   const [yMin, yMax] = yPaneRange;
   const [selected, setSelected] = useState<string | null>(null);
 
-  const points = useMemo(() => findKeyPoints(curves, xMin, xMax, yMin, yMax), [curves, xMin, xMax, yMin, yMax]);
+  const job = useMemo(
+    (): PlotJob => ({ kind: "keyPoints", curves, xMin, xMax, yMin, yMax, angleMode, scope: snapshot }),
+    [curves, xMin, xMax, yMin, yMax, angleMode, snapshot],
+  );
+  const { result } = usePlotJob(job, scope);
+  const points = useMemo(() => (result?.kind === "keyPoints" ? result.points : []), [result]);
   const selectedPoint = points.find((p) => pointKey(p) === selected);
 
   return (

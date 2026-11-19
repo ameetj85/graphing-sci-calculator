@@ -47,3 +47,40 @@ export function zRange(grids: Float64Array[]): { min: number; max: number } | nu
   }
   return { min, max };
 }
+
+/** A drawn grid cell, kept so the pointer can be mapped back to the surface. */
+export type Quad = { depth: number; points: number[]; fill: string; stroke: string; surfaceId: string; i: number; j: number };
+
+/**
+ * Finds the nearest drawn cell under (px, py) and returns its fractional grid
+ * position, from barycentric coordinates in one of the cell's two triangles.
+ */
+export function hitTest(quads: Quad[], px: number, py: number): { quad: Quad; gi: number; gj: number } | null {
+  for (let k = quads.length - 1; k >= 0; k--) {
+    const quad = quads[k];
+    const p = quad.points;
+    // Corners a (i, j), b (i + 1, j), c (i + 1, j + 1), d (i, j + 1) as grid offsets.
+    const grid = [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ];
+    for (const [u, v, w] of [
+      [0, 1, 2],
+      [0, 2, 3],
+    ]) {
+      const [x1, y1, x2, y2, x3, y3] = [p[2 * u], p[2 * u + 1], p[2 * v], p[2 * v + 1], p[2 * w], p[2 * w + 1]];
+      const det = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
+      if (Math.abs(det) < 1e-9) continue;
+      const l1 = ((y2 - y3) * (px - x3) + (x3 - x2) * (py - y3)) / det;
+      const l2 = ((y3 - y1) * (px - x3) + (x1 - x3) * (py - y3)) / det;
+      const l3 = 1 - l1 - l2;
+      if (l1 < -1e-6 || l2 < -1e-6 || l3 < -1e-6) continue;
+      const gi = quad.i + l1 * grid[u][0] + l2 * grid[v][0] + l3 * grid[w][0];
+      const gj = quad.j + l1 * grid[u][1] + l2 * grid[v][1] + l3 * grid[w][1];
+      return { quad, gi, gj };
+    }
+  }
+  return null;
+}

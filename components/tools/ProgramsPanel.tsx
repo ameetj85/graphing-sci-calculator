@@ -311,7 +311,7 @@ break / continue`}</pre>
         <p>
           Programs can read your variables, functions and other programs, but their assignments stay inside the program.
           Saved programs work in expressions and graphs, e.g. <code>fib(10) + 1</code> or <code>y = sumTo(x)</code>.
-          A run stops after 100,000 steps; in graphs and tables, after 2,000 per point.
+          A run stops after 100,000 steps. In graphs, a program stops after 10,000 steps per point; in the trace and value table, after 2,000.
         </p>
       </div>
     </details>

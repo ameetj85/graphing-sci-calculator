@@ -4,8 +4,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatCoordinate } from "@/lib/graph/keyPoints";
 import type { PlotJob, PlotJobResult } from "@/lib/graph/plotJobs";
 import type { ScopeSnapshot } from "@/lib/graph/scopeSnapshot";
-import { zRange } from "@/lib/graph/surface";
-import type { AngleMode, Scope } from "@/lib/math/engine";
+import { hitTest, zRange, type Quad } from "@/lib/graph/surface";
+import { compileInVariables, type AngleMode, type Scope } from "@/lib/math/engine";
 import { usePlotJob } from "./usePlotJob";
 
 export type GraphSurface = { id: string; name: string; source: string; color: string };
@@ -26,6 +26,10 @@ const MIN_PITCH = -1.45;
 const MAX_PITCH = 1.45;
 
 type Rotation = { yaw: number; pitch: number };
+
+/** A point on a surface, in graph coordinates. */
+type Readout = { surfaceId: string; x: number; y: number; z: number };
+
 type Rgb = [number, number, number];
 
 function parseColor(text: string): Rgb {
@@ -78,12 +82,13 @@ type DrawInput = {
   range: { min: number; max: number } | null;
 };
 
-function draw({ canvas, width, height, rotation, result, colors, range }: DrawInput) {
+/** Draws the box and surfaces; returns the drawn cells, farthest first. */
+function draw({ canvas, width, height, rotation, result, colors, range }: DrawInput): Quad[] {
   const ratio = window.devicePixelRatio || 1;
   canvas.width = Math.round(width * ratio);
   canvas.height = Math.round(height * ratio);
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) return [];
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   const style = getComputedStyle(canvas);
   const bg = style.getPropertyValue("--mafs-bg").trim() || "#fff";
@@ -113,6 +118,7 @@ function draw({ canvas, width, height, rotation, result, colors, range }: DrawIn
   }
   ctx.stroke();
 
+  const quads: Quad[] = [];
   if (result && range) {
     const n = result.n;
     const size = n + 1;
@@ -124,8 +130,7 @@ function draw({ canvas, width, height, rotation, result, colors, range }: DrawIn
       return l.map((v) => v / len) as [number, number, number];
     })();
 
-    type Quad = { depth: number; points: number[]; fill: string; stroke: string };
-    const quads: Quad[] = [];
+
     for (const grid of result.grids) {
       if (!("z" in grid)) continue;
       const base = resolveColor(canvas, colors[grid.id] ?? "var(--mafs-blue)");
@@ -171,6 +176,9 @@ function draw({ canvas, width, height, rotation, result, colors, range }: DrawIn
             points: [px[a], py[a], px[b], py[b], px[c], py[c], px[d], py[d]],
             fill: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`,
             stroke: `rgb(${edge[0]},${edge[1]},${edge[2]})`,
+            surfaceId: grid.id,
+            i,
+            j,
           });
         }
       }
@@ -206,7 +214,10 @@ function draw({ canvas, width, height, rotation, result, colors, range }: DrawIn
   label("x", 0, -1.18, -H);
   label("y", 1.18, 0, -H);
   label("z", -1.12, -1.12, 0);
+  return quads;
 }
+
+const DRAG_THRESHOLD = 4; // pixels a press may move and still count as a click
 
 export function SurfaceView({ surfaces, scope, snapshot, angleMode }: SurfaceViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -215,7 +226,11 @@ export function SurfaceView({ surfaces, scope, snapshot, angleMode }: SurfaceVie
   const [radius, setRadius] = useState(DEFAULT_RADIUS[angleMode]);
   const [rotation, setRotation] = useState<Rotation>(DEFAULT_ROTATION);
   const [themeVersion, setThemeVersion] = useState(0);
-  const drag = useRef<{ x: number; y: number; id: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; startX: number; startY: number; id: number; moved: boolean } | null>(null);
+  const quadsRef = useRef<Quad[]>([]);
+  // The point under the pointer, and a point pinned by clicking.
+  const [hover, setHover] = useState<Readout | null>(null);
+  const [pinned, setPinned] = useState<Readout | null>(null);
 
   useLayoutEffect(() => {
     const element = containerRef.current;
@@ -271,8 +286,52 @@ export function SurfaceView({ surfaces, scope, snapshot, angleMode }: SurfaceVie
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || size.width === 0 || size.height === 0) return;
-    draw({ canvas, width: size.width, height: size.height, rotation, result: surfaceResult, colors, range });
+    quadsRef.current = draw({ canvas, width: size.width, height: size.height, rotation, result: surfaceResult, colors, range });
   }, [size, rotation, surfaceResult, colors, range, themeVersion]);
+
+  // Exact z for the readout, evaluated here (one point at a time).
+  const evaluators = useMemo(
+    () =>
+      Object.fromEntries(
+        surfaces.map((s) => {
+          const f = compileInVariables(s.source, ["x", "y"], scope, angleMode);
+          return [s.id, f.ok ? f.fn : null];
+        }),
+      ),
+    [surfaces, scope, angleMode],
+  );
+
+  /** The surface point under a pointer position, or null. */
+  function readAt(clientX: number, clientY: number): Readout | null {
+    const canvas = canvasRef.current;
+    if (!canvas || !surfaceResult) return null;
+    const rect = canvas.getBoundingClientRect();
+    const hit = hitTest(quadsRef.current, clientX - rect.left, clientY - rect.top);
+    if (!hit) return null;
+    const { xMin, xMax, yMin, yMax } = surfaceResult.domain;
+    const x = xMin + ((xMax - xMin) * hit.gi) / surfaceResult.n;
+    const y = yMin + ((yMax - yMin) * hit.gj) / surfaceResult.n;
+    const z = evaluators[hit.quad.surfaceId]?.(x, y) ?? NaN;
+    return Number.isFinite(z) ? { surfaceId: hit.quad.surfaceId, x, y, z } : null;
+  }
+
+  // The readout to show, and where its marker sits on the canvas.
+  const shown = pinned ?? hover;
+  const marker = (() => {
+    if (!shown || !range || !surfaceResult || size.width === 0) return null;
+    const { xMin, xMax, yMin, yMax } = surfaceResult.domain;
+    if (shown.x < xMin || shown.x > xMax || shown.y < yMin || shown.y > yMax) return null;
+    const mid = (range.min + range.max) / 2;
+    const half = (range.max - range.min) / 2;
+    const { project } = makeProjector(rotation, size.width, size.height);
+    const [left, top] = project(
+      -1 + (2 * (shown.x - xMin)) / (xMax - xMin),
+      -1 + (2 * (shown.y - yMin)) / (yMax - yMin),
+      Math.max(-1, Math.min(1, (shown.z - mid) / half)) * BOX_HEIGHT,
+    );
+    return { left, top };
+  })();
+  const shownSurface = shown ? surfaces.find((s) => s.id === shown.surfaceId) : undefined;
 
   const rotateBy = (dYaw: number, dPitch: number) =>
     setRotation((r) => ({ yaw: r.yaw + dYaw, pitch: Math.max(MIN_PITCH, Math.min(MAX_PITCH, r.pitch + dPitch)) }));
@@ -295,19 +354,35 @@ export function SurfaceView({ surfaces, scope, snapshot, angleMode }: SurfaceVie
         style={{ width: size.width, height: size.height, touchAction: "none" }}
         className="block cursor-grab outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:cursor-grabbing"
         onPointerDown={(event) => {
-          drag.current = { x: event.clientX, y: event.clientY, id: event.pointerId };
+          const { clientX: x, clientY: y } = event;
+          drag.current = { x, y, startX: x, startY: y, id: event.pointerId, moved: false };
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={(event) => {
           const last = drag.current;
-          if (!last || last.id !== event.pointerId) return;
-          rotateBy((event.clientX - last.x) * 0.01, (event.clientY - last.y) * 0.01);
-          drag.current = { ...last, x: event.clientX, y: event.clientY };
+          if (!last || last.id !== event.pointerId) {
+            // Not dragging: show the point under the pointer.
+            if (event.pointerType === "mouse") setHover(readAt(event.clientX, event.clientY));
+            return;
+          }
+          const moved =
+            last.moved || Math.hypot(event.clientX - last.startX, event.clientY - last.startY) > DRAG_THRESHOLD;
+          if (moved) {
+            rotateBy((event.clientX - last.x) * 0.01, (event.clientY - last.y) * 0.01);
+            setHover(null);
+          }
+          drag.current = { ...last, x: event.clientX, y: event.clientY, moved };
         }}
-        onPointerUp={() => (drag.current = null)}
+        onPointerUp={(event) => {
+          // A click (or tap) pins the point under it; clicking off the surface unpins.
+          if (drag.current && !drag.current.moved) setPinned(readAt(event.clientX, event.clientY));
+          drag.current = null;
+        }}
         onPointerCancel={() => (drag.current = null)}
+        onPointerLeave={() => setHover(null)}
         onKeyDown={(event) => {
           const actions: Record<string, () => void> = {
+            Escape: () => setPinned(null),
             ArrowLeft: () => rotateBy(-0.1, 0),
             ArrowRight: () => rotateBy(0.1, 0),
             ArrowUp: () => rotateBy(0, -0.1),
@@ -342,6 +417,15 @@ export function SurfaceView({ surfaces, scope, snapshot, angleMode }: SurfaceVie
         </OverlayButton>
       </div>
 
+      {marker && shownSurface && (
+        <span
+          aria-hidden
+          data-surface-marker=""
+          className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow dark:border-zinc-900"
+          style={{ left: marker.left, top: marker.top, background: shownSurface.color }}
+        />
+      )}
+
       <div className="pointer-events-none absolute bottom-2 left-2 flex flex-col gap-0.5 rounded-md bg-white/85 px-2 py-1 text-xs text-zinc-600 dark:bg-zinc-900/85 dark:text-zinc-300">
         {surfaces.length === 0 ? (
           <span>
@@ -359,9 +443,14 @@ export function SurfaceView({ surfaces, scope, snapshot, angleMode }: SurfaceVie
                 )}
               </span>
             )}
-            <span>Drag to rotate, scroll to zoom{busy ? " · Computing…" : ""}</span>
+            <span>Drag to rotate, scroll to zoom, click to pin a point{busy ? " · Computing…" : ""}</span>
           </>
         )}
+        <span aria-live="polite" aria-label="Surface point" className="font-mono text-zinc-900 dark:text-zinc-50">
+          {shown && shownSurface
+            ? `${shownSurface.name}${pinned ? " (pinned)" : ""}: x = ${formatCoordinate(shown.x)}, y = ${formatCoordinate(shown.y)}, z = ${formatCoordinate(shown.z)}`
+            : ""}
+        </span>
         {errors.map((e) => (
           <span key={e.id} className="text-red-600 dark:text-red-400">
             {surfaces.find((s) => s.id === e.id)?.name}: {e.error}
