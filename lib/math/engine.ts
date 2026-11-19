@@ -1,5 +1,6 @@
 import { all, create, type MathJsInstance } from "mathjs";
 import { DISTRIBUTIONS } from "@/lib/stats/distributions";
+import { CALCULUS, CALCULUS_FUNCTIONS } from "./calculusFunctions";
 
 export type AngleMode = "rad" | "deg" | "grad";
 
@@ -111,6 +112,7 @@ function buildEngine(mode: AngleMode): Engine {
     {
       ...trigFunctions(math, mode),
       ...DISTRIBUTIONS,
+      ...CALCULUS,
       import: disabled("import"),
       createUnit: disabled("createUnit"),
       evaluate: disabled("evaluate"),
@@ -231,11 +233,21 @@ export function compileInVariables(
       return { ok: false, error: `Enter an expression in ${names}, such as ${variables.map((v) => `${v}^2`).join(" + ")} - 1` };
     }
 
+    // Variables bound by nDeriv, fnInt and solve (t in fnInt(t^2, t, 0, x)) are known.
+    const bound = new Set<string>();
+    node.traverse((child) => {
+      if (child.type !== "FunctionNode") return;
+      const { fn, args } = child as unknown as { fn: { name?: string }; args: { type: string; name?: string }[] };
+      if ((CALCULUS_FUNCTIONS as readonly string[]).includes(fn.name ?? "") && args[1]?.type === "SymbolNode") {
+        bound.add(args[1].name!);
+      }
+    });
+
     const unknown = new Set<string>();
     node.traverse((child) => {
       if (child.type !== "SymbolNode") return;
       const name = (child as unknown as { name: string }).name;
-      if (!variables.includes(name) && !scope.has(name) && !(name in math)) unknown.add(name);
+      if (!variables.includes(name) && !bound.has(name) && !scope.has(name) && !(name in math)) unknown.add(name);
     });
     if (unknown.size > 0) {
       return { ok: false, error: `Undefined symbol${unknown.size > 1 ? "s" : ""}: ${[...unknown].join(", ")}` };

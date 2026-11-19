@@ -44,6 +44,25 @@ describe("findKeyPoints", () => {
     expect(intersections[1].y).toBeCloseTo(2, 8);
     expect(intersections[0].curveIds).toEqual(["a", "b"]);
   });
+
+  it("reports maxima and minima, once when they are also roots", () => {
+    const points = findKeyPoints(
+      [
+        { id: "cubic", fn: (x) => x ** 3 - 3 * x }, // max at (-1, 2), min at (1, -2)
+        { id: "square", fn: (x) => (x - 1) ** 2 }, // min at (1, 0), also a root
+      ],
+      -3,
+      3,
+      -5,
+      5,
+    );
+    const extrema = points.filter((p) => p.kind === "max" || p.kind === "min");
+    expect(extrema.map((p) => [p.kind, p.curveIds[0], Number(p.x.toFixed(6)), Number(p.y.toFixed(6))])).toEqual([
+      ["max", "cubic", -1, 2],
+      ["min", "cubic", 1, -2],
+    ]);
+    expect(points.filter((p) => p.curveIds[0] === "square" && p.curveIds.length === 1).map((p) => p.kind)).toEqual(["root"]);
+  });
 });
 
 describe("nearestDefinedX", () => {

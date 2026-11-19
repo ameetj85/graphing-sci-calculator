@@ -6,6 +6,8 @@ import { Tex } from "@/components/Tex";
 import { EquationList } from "@/components/graph/EquationList";
 import { Graph, type GraphCurve, type GraphShape } from "@/components/graph/Graph";
 import { SurfaceView, type GraphSurface } from "@/components/graph/SurfaceView";
+import { SliderList } from "@/components/graph/SliderList";
+import { defaultRange, sliderVariables, type SliderRange } from "@/lib/graph/sliders";
 import { snapshotScope } from "@/lib/graph/scopeSnapshot";
 import { compilePlot, type PlotResult } from "@/lib/graph/plotSpec";
 import { EMPTY_EDITOR, editorReducer, type EditorAction, type EditorState } from "@/lib/calculator/editor";
@@ -26,6 +28,7 @@ import {
   evaluateExpression,
   expressionToTex,
   formatValue,
+  isBuiltInName,
   type AngleMode,
   type EvalResult,
   type Scope,
@@ -163,6 +166,8 @@ export function Calculator() {
   const [traceX, setTraceX] = useState(0);
   const [displayMode, setDisplayMode] = useState<DisplayMode>(initial.displayMode);
   const [showKeyPoints, setShowKeyPoints] = useState(true);
+  /** Slider bounds the user has edited, by variable name; others use defaultRange. */
+  const [sliderRanges, setSliderRanges] = useState<Record<string, SliderRange>>({});
   const [copied, setCopied] = useState(false);
   const [xNoteDismissed, setXNoteDismissed] = useState(false);
 
@@ -177,6 +182,12 @@ export function Calculator() {
 
   const previewTex = useMemo(() => expressionToTex(expression.value), [expression.value]);
   const exactForm = useMemo(() => (result?.ok ? toExactForm(result.value) : null), [result]);
+
+  // Free variables of the equations: sliders for defined ones, offers for the rest.
+  const sliderInfo = useMemo(
+    () => sliderVariables(equations.map((eq) => eq.text), graphScope, isBuiltInName),
+    [equations, graphScope],
+  );
 
   // Plain-data copy of the scope for the plotting worker.
   const snapshot = useMemo(() => snapshotScope(graphScope), [graphScope]);
@@ -363,6 +374,12 @@ export function Calculator() {
     if (evaluated.ok) {
       setHistory((entries) => addHistoryEntry(entries, { expression: source, result: evaluated.display, at: Date.now() }));
     }
+  }
+
+  /** Sets a variable from a slider; the graph redraws with the new value. */
+  function setVariable(name: string, value: number) {
+    scopeRef.current.set(name, value);
+    setGraphScope(new Map(scopeRef.current));
   }
 
   /** Deletes a user variable or function from the calculator scope. */
@@ -575,6 +592,17 @@ export function Calculator() {
           onShow3D={() => setView("3d")}
         />
 
+        <SliderList
+          sliders={sliderInfo.sliders.map((name) => {
+            const value = graphScope.get(name) as number;
+            return { name, value, range: sliderRanges[name] ?? defaultRange(value) };
+          })}
+          missing={sliderInfo.missing}
+          onChange={setVariable}
+          onRangeChange={(name, range) => setSliderRanges((ranges) => ({ ...ranges, [name]: range }))}
+          onAdd={(name) => setVariable(name, 1)}
+        />
+
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-zinc-600 dark:text-zinc-400">
           <Segmented
             label="Graph view"
@@ -609,7 +637,7 @@ export function Calculator() {
                   onChange={(event) => setShowKeyPoints(event.target.checked)}
                   className="size-4 accent-blue-600"
                 />
-                Roots &amp; intersections
+                Key points
               </label>
             </>
           )}
@@ -675,7 +703,7 @@ export function Calculator() {
           </div>
         </div>
         {view === "2d" && showKeyPoints && curves.length > 0 && (
-          <p className="text-xs text-zinc-500">Hover a dot to see a root or intersection; click it to pin its coordinates.</p>
+          <p className="text-xs text-zinc-500">Dots mark roots, maxima, minima and intersections. Hover one to see what it is; click it to pin its coordinates.</p>
         )}
       </section>
 
