@@ -194,6 +194,8 @@ In DEG and GRAD modes, exact quarter turns give exact answers: `cos(90)` is `0`,
 
 **Explicit angle units** override the mode for one value: in any mode, `sin(30 deg)` → `1/2`.
 
+Put parentheses around a calculated angle before its unit: `sin((pi/6) rad)` → `1/2`. Without them, `pi/6 rad` means `pi / (6 rad)`, so `sin(pi/6 rad)` gives the error *sin needs an angle, such as 30 deg, but got a value in rad^-1; write (pi/6) rad, not pi/6 rad, which means pi / (6 rad)*. A non-angle unit gives a similar error: `cos(5 m)` → *cos needs an angle, such as 30 deg, but got a value in m*.
+
 **Functions follow the mode.** If you define `h(x) = sin(x)` and then switch from RAD to DEG, `h(30)` changes from `-0.988031624093` to `0.5`.
 
 **Graphs follow the mode.** In DEG mode, `y = sin(x)` has period 360 on the x-axis; the note “x in degrees” under the graph controls reminds you. Use **Trig view** on the graph to jump to a window that fits one or two periods.
@@ -603,6 +605,8 @@ All of this is stored in your browser only. Private windows or blocked site stor
 | *Unexpected type of argument …* | `1 min to s` | `min` is the minimum function; use `minute` |
 | *Units do not match* | `5 m + 2 s` | You can only add or convert compatible units |
 | *tan is undefined at 90°* | `tan(90)` in DEG | tan has no value at odd quarter turns |
+| *sin needs an angle, … got a value in rad^-1; write (pi/6) rad …* | `sin(pi/6 rad)` | `pi/6 rad` means `pi / (6 rad)`. Write `sin((pi/6) rad)` |
+| *cos needs an angle, such as 30 deg, but got a value in m* | `cos(5 m)` | sin, cos and tan take a plain number or an angle unit (`rad`, `deg`, `grad`) |
 | *Matrix must be square* | `det([[1,2,3],[4,5,6]])` | Determinant and inverse need square matrices |
 | *shape mismatch …* | `[1, 2] + [1, 2, 3]` | Vector and matrix sizes must agree |
 | *Function evaluate is disabled* | `evaluate("1+1")` | Some functions are switched off for safety |
