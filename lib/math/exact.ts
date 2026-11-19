@@ -54,6 +54,9 @@ function formWithSymbol(p: number, q: number, symbolText: string, symbolTex: str
 export function toExactForm(value: unknown): ExactForm | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   if (Number.isInteger(value) || Math.abs(value) > MAX_MAGNITUDE || Math.abs(value) < 1e-9) return null;
+  // Rounding noise next to a whole number (tan(pi/4) = 0.9999999999999999)
+  // is shown as the decimal, which already displays as the whole number.
+  if (Math.abs(value - Math.round(value)) <= TOLERANCE * Math.abs(value)) return null;
 
   const fraction = toFraction(value, 10000);
   if (fraction) {

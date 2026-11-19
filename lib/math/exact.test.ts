@@ -42,4 +42,11 @@ describe("toExactForm", () => {
     expect(toExactForm("1/2")).toBeNull();
     expect(toExactForm(NaN)).toBeNull();
   });
+
+  it("returns null for rounding noise next to a whole number", () => {
+    expect(toExactForm(Math.tan(Math.PI / 4))).toBeNull(); // 0.9999999999999999, not "1/1"
+    expect(toExactForm(0.1 * 3 * 10)).toBeNull(); // 3.0000000000000004
+    expect(toExactForm(-2.0000000000000004)).toBeNull();
+    expect(text(1.5)).toBe("3/2");
+  });
 });

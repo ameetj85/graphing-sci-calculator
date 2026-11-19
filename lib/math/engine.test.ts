@@ -159,6 +159,18 @@ describe("angle modes", () => {
     expect(deg("sin((pi/2) rad)")).toBe("1");
   });
 
+  it("names the right function when trig gets a unit that isn't an angle", () => {
+    for (const mode of ["rad", "deg", "grad"] as const) {
+      const result = evaluateExpression("cos(5 m)", createScope(), mode);
+      expect(result.ok ? null : result.error).toBe("cos needs an angle, such as 30 deg, but got a value in m");
+    }
+    const tan = evaluateExpression("tan(5 m)", createScope());
+    expect(tan.ok ? null : tan.error).toMatch(/^tan needs an angle/);
+    // pi/6 rad is pi / (6 rad), in rad^-1: suggest the parentheses.
+    const sin = evaluateExpression("sin(pi/6 rad)", createScope(), "deg");
+    expect(sin.ok ? null : sin.error).toMatch(/^sin needs an angle.*rad\^-1.*\(pi\/6\) rad/);
+  });
+
   it("graphs in the selected angle mode", () => {
     const fn = compileFunction("sin(x)", createScope(), "deg");
     expect(fn.ok && fn.fn(90)).toBe(1);
