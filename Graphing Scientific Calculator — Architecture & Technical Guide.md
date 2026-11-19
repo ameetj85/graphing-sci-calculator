@@ -9,10 +9,12 @@ The project is a browser-only graphing scientific calculator: a Next.js shell ar
 **What it does**
 
 - Scientific evaluation: nested expressions, powers, roots, factorials, trig/inverse/hyperbolic functions, logs, complex numbers, units and constants, with exact-form display (fractions, multiples of √n and π).
-- Graphing: `y = f(x)` curves, inequalities and arbitrary shaded regions (including chains such as `1 < x <= 2`), implicit curves `F(x, y) = 0`, parametric and polar curves, and 3D surfaces `z = f(x, y)`.
-- Inspection: trace point, roots and intersections, an adaptive grid, and a value table synced with the trace.
+- Numeric calculus and solving: `nDeriv` (derivative at a point), `fnInt` (definite integral) and `solve` (roots near a guess or in a bracket), usable in expressions and graphs.
+- Graphing: `y = f(x)` curves, inequalities and arbitrary shaded regions (including chains such as `1 < x <= 2`), implicit curves `F(x, y) = 0`, parametric and polar curves, slope fields `dy/dx = f(x, y)`, vector fields `field(P, Q)`, and 3D surfaces `z = f(x, y)`.
+- Inspection: trace point with slope, roots, local maxima and minima, intersections, an adaptive grid, and a value table synced with the trace.
+- Presentation: an exact graph window, grid and axis-number toggles, axis titles, per-equation colour, line type and thickness, and sliders for free variables.
 - Data: lists `L1`/`L2`, matrices `A`–`F`, summary statistics, probability distributions and regression with the fitted curve plotted.
-- State: radian/degree/gradian modes, unit conversion, a variables and constants panel, history, and a share URL.
+- State: radian/degree/gradian modes, unit conversion, a variables and constants panel, history, and a share URL that also carries styles and graph settings.
 - Programmability: a small line-based scripting language whose saved programs become callable functions in expressions and graphs.
 
 **Technology stack**
@@ -50,23 +52,24 @@ One client component, `Calculator`, owns all application state and passes slices
 
 ## Repository layout
 
-About 8,500 lines of TypeScript, split into a thin `app/` shell, client components in `components/`, and framework-free logic in `lib/` (each module with a `*.test.ts` beside it).
+About 10,300 lines of TypeScript and CSS, split into a thin `app/` shell, client components in `components/`, and framework-free logic in `lib/` (each module with a `*.test.ts` beside it).
 
 | Path | Role |
 | --- | --- |
 | `app/layout.tsx` | Root layout: Geist fonts, KaTeX, Mafs and global CSS |
 | `app/page.tsx` | Server component; renders `<Calculator>` inside `<Suspense>` with a skeleton fallback |
 | `app/globals.css` | Tailwind v4 `@theme inline` tokens and `.MafsView` colour variables |
-| `components/calculator/Calculator.tsx` | Root client component (\~800 lines): owns all state, wires every panel |
+| `components/calculator/Calculator.tsx` | Root client component (about 870 lines): owns all state, wires every panel |
 | `components/calculator/` | `ExpressionInput`, `Keypad`, `HistoryPanel` |
-| `components/graph/Graph.tsx` | Mafs host: measures its size, renders curves, shapes and overlays |
-| `components/graph/` | `FunctionCurve`, `ParametricCurve`, `ImplicitCurve`, `InequalityRegion`, `ImplicitRegion`, `KeyPoints`, `TracePoint`, `AdaptiveGrid`, `EquationList`, `ValueTable`, `SurfaceView`, `usePlotJob` |
+| `components/graph/Graph.tsx` | Mafs host: measures its size, renders curves, shapes, fields and overlays, owns the view and the Window panel |
+| `components/graph/` | `FunctionCurve`, `ParametricCurve`, `ImplicitCurve`, `InequalityRegion`, `ImplicitRegion`, `VectorField`, `KeyPoints`, `TracePoint`, `AdaptiveGrid`, `WindowPanel`, `EquationList` (with the style picker), `SliderList`, `ValueTable`, `SurfaceView`, `usePlotJob` |
 | `components/tools/` | `ToolsPanel` tabs: `StatsPanel`, `MatrixPanel`, `UnitsPanel`, `VariablesPanel`, `ProgramsPanel` |
 | `components/Tex.tsx` | KaTeX renderer |
-| `lib/math/` | `engine.ts` (the only parser/evaluator), `exact.ts` (exact forms), `units.ts`, `constants.ts` |
+| `lib/math/` | `engine.ts` (the only parser/evaluator), `calculus.ts` (numeric derivative, integral, roots, extrema), `calculusFunctions.ts` (`nDeriv`, `fnInt`, `solve`), `exact.ts`, `units.ts`, `constants.ts` |
 | `lib/calculator/` | `editor.ts` (input reducer), `keys.ts` (keypad layout), `history.ts`, `workspace.ts` (lists and matrices) |
 | `lib/graph/plotSpec.ts` | Classifies each equation row into a plot kind |
-| `lib/graph/` | `sample.ts`, `implicit.ts`, `region.ts`, `surface.ts`, `keyPoints.ts`, `table.ts`, `gridStep.ts`, `equations.ts` |
+| `lib/graph/equations.ts` | Equation model, line styles, graph settings, share-URL encoding |
+| `lib/graph/` | `sample.ts`, `implicit.ts`, `region.ts`, `field.ts`, `surface.ts`, `keyPoints.ts`, `sliders.ts`, `table.ts`, `gridStep.ts` |
 | `lib/graph/plotJobs.ts`, `plotClient.ts`, `plot.worker.ts`, `scopeSnapshot.ts` | Worker job definitions, client, worker entry, scope serialisation |
 | `lib/stats/` | `stats.ts` (summary, regression), `distributions.ts` (pdf/cdf functions) |
 | `lib/script/` | `interpreter.ts` (language), `programs.ts` (validation, storage, examples) |
@@ -79,9 +82,11 @@ About 8,500 lines of TypeScript, split into a thin `app/` shell, client componen
 
 **Sandboxing.** Each instance is created with `create(all, …)`. The module captures `parse` and `format` first, then overrides `import`, `createUnit`, `evaluate`, `parse`, `simplify`, `derivative`, `resolve` and `reviver` with functions that throw. This follows the Math.js security guide: user text cannot redefine the instance or re-enter the parser.
 
-**Angle modes.** `AngleMode` is `"rad" | "deg" | "grad"`; `HALF_TURN` maps each to π, 180 or 200. `trigFunctions(math, mode)` replaces sin, cos, tan, sec, csc, cot and their inverses (plus `atan2`). In degree and gradian modes, exact multiples of a quarter turn return exactly 0 (sin 180° = 0), and tan at an odd quarter turn throws. Results under 1e-15 for non-tiny inputs are snapped to 0. Non-number inputs (`30 deg`, complex numbers) pass straight to Math.js. A node must be parsed by the same instance that evaluates it.
+**Angle modes.** `AngleMode` is `"rad" | "deg" | "grad"`; `HALF_TURN` maps each to π, 180 or 200. `trigFunctions(math, mode)` replaces sin, cos, tan, sec, csc, cot and their inverses (plus `atan2`). In degree and gradian modes, exact multiples of a quarter turn return exactly 0 (sin 180° = 0), and tan at an odd quarter turn throws. Results under 1e-15 for non-tiny inputs are snapped to 0. Angle units (`30 deg`) and complex numbers pass straight to Math.js; any other unit is rejected with a message that names the function (`cos needs an angle, such as 30 deg, but got a value in m`), with a hint when `pi/6 rad` was read as `pi / (6 rad)`. A node must be parsed by the same instance that evaluates it.
 
-**Extensions.** Units `cal`, `knot` and `nmi` are added with `createUnit` before that function is disabled. The distribution functions from `lib/stats/distributions.ts` (`normalpdf`, `normalcdf`, `invNorm`, `binompdf`, `binomcdf`, `poissonpdf`, `poissoncdf`) are imported into every instance.
+**Extensions.** Units `cal`, `knot` and `nmi` are added with `createUnit` before that function is disabled. The distribution functions from `lib/stats/distributions.ts` (`normalpdf`, `normalcdf`, `invNorm`, `binompdf`, `binomcdf`, `poissonpdf`, `poissoncdf`) and the calculus functions from `lib/math/calculusFunctions.ts` (`nDeriv`, `fnInt`, `solve`) are imported into every instance.
+
+**Calculus functions.** `nDeriv(expr, var, a)`, `fnInt(expr, var, a, b)` and `solve(expr, var, guess)` / `solve(expr, var, a, b)` are Math.js `rawArgs` functions: they receive their arguments as unevaluated nodes, so the variable named in the second argument is bound only inside the first. A `BoundScope` overlay reads through to the caller's scope and keeps the bound variable (and any assignments) local. Compiled nodes are cached in a `WeakMap`, because graphs call these functions hundreds of times per redraw. `solve` also accepts `lhs == rhs`, solved as lhs − rhs. The numerics live in `lib/math/calculus.ts`: `derivativeAt` (five-point central difference), `integrate` (adaptive Gauss–Kronrod 7/15, up to 400 intervals, nodes never on the ends), `rootNear` (Newton's method, then an outward sign-change search) and `rootInBracket` (bisection, rejecting poles and jumps). `compileInVariables` treats variables bound by these functions as known, so `y = fnInt(t, t, 0, x)` compiles without an "Undefined symbol: t" error.
 
 **Public API**
 
@@ -90,16 +95,17 @@ About 8,500 lines of TypeScript, split into a thin `app/` shell, client componen
 | `createScope()` | New `Map` with `ans = 0`; owned by the caller |
 | `evaluateExpression(expr, scope, mode)` | Evaluate, store assignments, update `ans`; returns `{ ok, value, display, tex }` or `{ ok: false, error }`. Multi-statement input returns the last visible result |
 | `compileFunction(expr, scope, mode)` | `y = f(x)` → `(x) => number` returning NaN where the value isn't real |
-| `compileIn` / `compileInVariables` | Same, for any variable list (`t`, `theta`, `[x, y]`). Rejects unknown symbols up front |
+| `compileIn` / `compileInVariables` | Same, for any variable list (`t`, `theta`, `[x, y]`). Rejects unknown symbols up front, except variables bound by `nDeriv`, `fnInt` and `solve` |
 | `compileStatement(source, mode)` | Compiled statement for the script interpreter |
 | `functionDefinition(fn)` | The `{ source, angleMode }` recorded on functions made by `f(x) = …` |
 | `rebindFunctions(scope, mode)` | Re-evaluates recorded definitions when the angle mode changes |
 | `convertUnits(value, from, to)` | Unit conversion using the same engine as typed expressions |
+| `isBuiltInName(name)` | True for Math.js built-ins (used by sliders and program validation) |
 | `expressionToTex`, `formatValue` | Display helpers (12 significant digits) |
 
 **Function definitions.** When an expression contains `f(x) = …`, `recordDefinitions` attaches the source text and angle mode to the resulting function under a private `Symbol`. That record lets the worker rebuild user functions from source and lets `rebindFunctions` move them to a new angle mode.
 
-**Exact forms.** `lib/math/exact.ts` (`toExactForm`) recognises fractions (continued-fraction approximation), rational multiples of √n for square-free n, and rational multiples of π, within a relative tolerance. It is for display only; stored values and history stay decimal.
+**Exact forms.** `lib/math/exact.ts` (`toExactForm`) recognises fractions (continued-fraction approximation), rational multiples of √n for square-free n, and rational multiples of π, within a relative tolerance. Values within rounding noise of a whole number (`tan(pi/4)` = 0.9999999999999999) get no exact form, so they display as the whole number. It is for display only; stored values and history stay decimal.
 
 **Constants and units.** `lib/math/constants.ts` lists mathematical and physical constants for the Variables panel. `lib/math/units.ts` defines the unit categories for the Units panel. Name collisions to remember: `min` is the function (use `minute`), and `mph` is undefined (use `mi/h`).
 
@@ -114,12 +120,14 @@ About 8,500 lines of TypeScript, split into a thin `app/` shell, client componen
 | `scopeRef` | `Scope` (ref) | The live, mutable Math.js scope |
 | `graphScope` | `Scope` (state) | A copy taken after each change, so memoised compilation re-runs |
 | `expression` | `EditorState` via `useReducer(editorReducer)` | Text plus selection of the main input |
-| `equations` | `Equation[]` | id, `text`, colour, visibility; max 6 rows |
+| `equations` | `Equation[]` | id, `text`, `visible`, `color` and `style` (`{ dash, width }`); max 6 rows |
 | `selections` | `Record<id, Selection>` | Cursor per equation row, kept apart from `text` so cursor moves don't recompile |
 | `activeField` | `"expression"` or an equation id | Where the keypad types |
 | `angleMode`, `displayMode`, `view` | `rad/deg/grad`, `exact/decimal`, `2d/3d` | Global modes |
+| `graphSettings` | `GraphSettings` | Window (or null), grid, axis numbers, x/y axis titles; goes into the share URL |
+| `sliderRanges` | `Record<name, SliderRange>` | Slider bounds the user edited; others use `defaultRange` |
 | `history`, `data`, `matrices`, `programs` | persisted | Saved by effects on change |
-| `traceId`, `traceX` |  | Shared by `Graph` and `ValueTable` |
+| `traceId`, `traceX` | | Shared by `Graph` and `ValueTable` |
 
 **Editor reducer.** `lib/calculator/editor.ts` is a pure reducer over `{ value, start, end }` with actions `set`, `select`, `insert`, `wrap` (e.g. `sin(` around the selection), `backspace` and `clear`. Keypad presses and page-level shortcuts dispatch to it; a layout effect copies the selection back into the `<input>`. Equation rows reuse the same reducer through `editorFor(eq)` and `dispatchEquation`.
 
@@ -127,7 +135,9 @@ About 8,500 lines of TypeScript, split into a thin `app/` shell, client componen
 
 **Evaluation path.** `evaluate()` runs `evaluateExpression` inside `captureOutput` (to collect `print` output from programs), stores the result, copies the scope into `graphScope`, and prepends a history entry (max 50).
 
-**Derived data.** `compiled` memoises `compilePlot` for each row against `graphScope` and `angleMode`. A second memo splits results into `curves` (y = f(x): traceable and tabulated), `shapes` (inequalities, implicit, regions, parametric/polar, data points) and `surfaces` (3D). `snapshot` is a memoised `snapshotScope(graphScope)` for the worker.
+**Derived data.** `compiled` memoises `compilePlot` for each row against `graphScope` and `angleMode`. A second memo splits results into `curves` (y = f(x): traceable and tabulated), `shapes` (inequalities, implicit curves, regions, fields, parametric/polar curves, data points) and `surfaces` (3D); curves and shapes carry the row's colour and style. `sliderInfo` (`sliderVariables`) lists the free variables the equations use. `snapshot` is a memoised `snapshotScope(graphScope)` for the worker.
+
+**Sliders and styles.** `setVariable(name, value)` writes the scope and refreshes `graphScope`, so a slider redraws every equation that uses the variable; **+ name** calls it with 1. `setEquationLook(id, change)` merges a partial `LookChange` (colour, dash or width) into the row's current look, so quick successive picks never overwrite each other.
 
 **Mode changes.** `changeAngleMode` sets the mode, calls `rebindFunctions` so user functions follow it, and re-registers programs (`syncPrograms`).
 
@@ -143,6 +153,8 @@ A single equation input handles every plot type: `compilePlot(text, scope, angle
 | --- | --- | --- | --- |
 | `r = 2 sin(3 theta)` (θ, `theta` or `t`) | `polar` | main thread, `sampleParametric` | `ParametricCurve` |
 | `(cos(t), sin(t))` | `parametric` | main thread | `ParametricCurve` |
+| `dy/dx = x - y` | `field`, `slope: true` | main thread, `fieldPaths` | `VectorField` |
+| `field(-y, x)` | `field`, `slope: false` | main thread, `fieldPaths` | `VectorField` |
 | `z = sin(x) cos(y)` | `surface` | worker `surface` job | `SurfaceView` (3D view) |
 | `x^2 + y^2 = 4` (single top-level `=`, `y` on the right or no `y =` form) | `implicit`, source `(lhs) - (rhs)` | worker `implicit` job | `ImplicitCurve` |
 | `y > x^2`, `x^2 <= y` | `inequality` | main thread, curve + fill path | `InequalityRegion` |
@@ -157,11 +169,15 @@ Polar and parametric rows may end with a range such as `{0 <= t <= 4pi}`; otherw
 
 **Regions** (`lib/graph/region.ts`). Every condition `F(x, y) op 0` is sampled on a grid. Cells fully inside merge into horizontal runs; boundary cells are clipped by each condition in turn (Sutherland–Hodgman with linear interpolation). `regionBoundaries` returns each condition's edge, clipped by bisection to where the other conditions hold; strict edges (`<`, `>`) are dashed. Cell corners are computed from grid indices (`xMin + (i + 1) * dx`) so neighbouring endpoints match exactly.
 
-**Key points and trace** (`lib/graph/keyPoints.ts`). `findKeyPoints` returns roots of each curve and intersections of each pair over the visible pane, including touching zeros. `TracePoint` follows the selected curve; `nearestDefinedX` skips gaps. `traceX` lives in `Calculator`, so `ValueTable` (11 rows, `lib/graph/table.ts`) highlights the matching row.
+**Fields** (`lib/graph/field.ts`). `fieldPaths` places one point per grid cell, on a `niceStep` grid offset half a step from the grid lines so arrows don't sit on the axes, at most 60 per axis. Directions are computed in pixels (from the view transform's x and y scales), so arrows keep their shape on unequal axes, and converted back to graph units. Arrows have a fixed length (75% of the spacing); their length in graph units picks one of four opacity shades. A slope field draws plain segments, and an infinite slope draws a vertical one. Fields cost a few hundred evaluations per view, so `VectorField` computes them on the main thread.
 
-**Grid and view.** `AdaptiveGrid` picks a spacing from the view transform (`niceStep`, at least 48 px between lines). Mafs colours are themed through `.MafsView` CSS variables.
+**Key points and trace** (`lib/graph/keyPoints.ts`, `lib/math/calculus.ts`). `findKeyPoints` returns roots of each curve, local maxima and minima (`findExtrema`: sampled, refined by golden-section search, rejected next to jumps and asymptotes, and skipped where the same curve has a root), and intersections of each pair, over the visible pane. `TracePoint` follows the selected curve, shows the slope from `derivativeAt`, and uses `nearestDefinedX` to skip gaps. `traceX` lives in `Calculator`, so `ValueTable` (11 rows, `lib/graph/table.ts`) highlights the matching row.
 
-**3D surfaces** (`components/graph/SurfaceView.tsx`). A hand-written canvas renderer, no 3D library. The worker samples each surface on an n × n grid (`sampleSurface` → `Float64Array`). The view normalises x and y to \[-1, 1\] and z to \[-0.75, 0.75\], applies yaw/pitch rotation and perspective, sorts quads back to front (painter's algorithm) and shades them with Lambert lighting. Drawn quads are kept so `hitTest` can read out (x, y, z) on hover; click pins it and Escape clears it.
+**Sliders** (`lib/graph/sliders.ts`). `sliderVariables` scans the equation texts for identifiers (skipping function calls, number exponents such as `2e3`, and the `dy/dx =` prefix). Numeric user variables get sliders; undefined names are offered as **+ name** buttons; graph coordinates, built-ins and workspace names are excluded. `SliderList` renders the rows; `snapToStep` keeps values free of floating-point noise, and `stepFor` picks a power-of-ten step for edited bounds.
+
+**Grid, window and styles.** `AdaptiveGrid` picks a spacing from the view transform (`niceStep`, at least 48 px between lines), can hide grid lines and axis numbers, and reports the current scale to `Graph`. A window applied from `WindowPanel` (or Trig view) is stored in `GraphSettings.window` and shown with Mafs `padding: 0`, so its bounds are exact; the default view keeps Mafs' 0.5 padding. Because Mafs doesn't export its coordinate context, the panel reads the visible window from the SVG `viewBox` and that scale. Axis titles are HTML overlays in the graph's corners. Every curve component takes a `LineStyle`: `LINE_WIDTH_PX` gives the stroke width and `dashArray` the dash pattern, scaled to the width; strict inequality edges stay dashed. Mafs colours are themed through `.MafsView` CSS variables.
+
+**3D surfaces** (`components/graph/SurfaceView.tsx`). A hand-written canvas renderer, no 3D library. The worker samples each surface on an n × n grid (`sampleSurface` → `Float64Array`). The view normalises x and y to [-1, 1] and z to [-0.75, 0.75], applies yaw/pitch rotation and perspective, sorts quads back to front (painter's algorithm) and shades them with Lambert lighting. Drawn quads are kept so `hitTest` can read out (x, y, z) on hover; click pins it and Escape clears it.
 
 ## Web Worker plot jobs
 
@@ -254,6 +270,10 @@ Shareable graph state goes in the URL; everything personal goes in `localStorage
 | `?eq=…&eq=…` | Equation texts (max 6, 200 chars each) | `lib/graph/equations.ts` |
 | `?angle=deg` / `grad` | Angle mode (omitted for rad) | `encodeShareState` |
 | `?view=3d` | 3D view (omitted for 2D) | `encodeShareState` |
+| `?st=1.3d3_2.2o1` | Colour and line style per equation, only where not the default: index.colour-number dash-code (`s`/`d`/`o`) width (1–3) | `encodeShareState` |
+| `?win=xMin,xMax,yMin,yMax` | Applied graph window (10 significant digits) | `encodeShareState` |
+| `?grid=0`, `?nums=0` | Grid lines / axis numbers turned off | `encodeShareState` |
+| `?xl=…`, `?yl=…` | Axis titles (max 40 chars) | `encodeShareState` |
 | `gsc.history.v1` | Up to 50 `{ expression, result, at }` entries, newest first | `lib/calculator/history.ts` |
 | `gsc.angle.v1` | Saved angle mode (URL value wins) | `Calculator` |
 | `gsc.display.v1` | `exact` or `decimal` | `Calculator` |
@@ -261,13 +281,15 @@ Shareable graph state goes in the URL; everything personal goes in `localStorage
 | `gsc.matrices.v1` | Matrices `A`–`F` | `lib/calculator/workspace.ts` |
 | `gsc.programs.v1` | Saved programs | `lib/script/programs.ts` |
 
-The URL is updated with `history.replaceState` whenever equations, angle mode or view change, so the address bar is always a shareable link (the Copy link button copies it). Every storage access is wrapped in `try/catch`; blocked storage falls back to defaults, and corrupt JSON is validated and discarded.
+The URL is updated with `history.replaceState` whenever equations, their styles, the angle mode, the view or the graph settings change, so the address bar is always a shareable link (the Copy link button copies it). Panning and zooming are not written to the URL; only an applied window is. Every storage access is wrapped in `try/catch`; blocked storage falls back to defaults, and corrupt JSON is validated and discarded. `decodeShareState` drops style entries for missing equations, unknown colours or codes, windows that aren't finite and ordered, and over-long titles.
+
+Variables, functions, slider values and slider ranges are not persisted.
 
 **Security model**
 
 - No `eval()` or `new Function` on user input. All parsing goes through Math.js.
-- Each Math.js instance disables `import`, `createUnit`, `evaluate`, `parse`, `simplify`, `derivative`, `resolve` and `reviver` for expressions.
-- Share-URL input is bounded (6 equations, 200 characters) and unknown parameter values are dropped.
+- Each Math.js instance disables `import`, `createUnit`, `evaluate`, `parse`, `simplify`, `derivative`, `resolve` and `reviver` for expressions. The calculus functions compile only nodes that the sandboxed parser already produced.
+- Share-URL input is bounded (6 equations, 200 characters each, 40-character titles) and unknown parameter values are dropped.
 - Scripts run under step, depth and output limits, so a runaway loop stops with an error instead of freezing the tab; in the worker, a superseded stuck job gets the worker restarted.
 - No server-side evaluation, so user input never reaches the server.
 
@@ -285,13 +307,13 @@ The URL is updated with `history.replaceState` whenever equations, angle mode or
 | `npm test` | Vitest, all suites once (`npm run test:watch` to watch) |
 | `npx vitest run lib/math/engine.test.ts -t "name"` | One file or one test |
 
-**Unit tests.** 180 Vitest tests in 20 files, all under `lib/`. The largest suites cover the engine (26), interpreter (23), graphing limitations (13), 3D (13), regions (12), sampling (11), statistics (10) and chained inequalities (8). No `Worker` exists in Vitest, so plot jobs run through the main-thread path. There are no React component tests. Run Vitest from PowerShell: under Git Bash every suite fails with "Cannot read properties of undefined (reading 'config')" because of drive-letter casing.
+**Unit tests.** 223 Vitest tests in 24 files, all under `lib/`. The largest suites cover the engine (26), interpreter (23), calculus numerics (13), 3D (13), graphing limitations (13), calculus functions (12), regions (12), sampling (11) and statistics (10). No `Worker` exists in Vitest, so plot jobs run through the main-thread path. There are no React component tests. Run Vitest from PowerShell: under Git Bash every suite fails with "Cannot read properties of undefined (reading 'config')" because of drive-letter casing.
 
-**Browser checks.** UI behaviour is verified by running `next start` and driving headless Edge over the Chrome DevTools Protocol with Node's built-in `WebSocket`. Use a fresh `--user-data-dir` per run (saved history and angle mode carry over), and call `Page.bringToFront` and `Emulation.setFocusEmulationEnabled` after every navigation; a hidden tab pauses `ResizeObserver`, so the graph never gets a height.
+**Browser checks.** UI behaviour is verified by running `next start` and driving headless Edge over the Chrome DevTools Protocol with Node's built-in `WebSocket`. Use a fresh `--user-data-dir` per run (saved history and angle mode carry over), and call `Page.bringToFront` and `Emulation.setFocusEmulationEnabled` after every navigation; a hidden tab pauses `ResizeObserver`, so the graph never gets a height. Return plain values from `Runtime.evaluate` (`!!element`, not the element), since DOM nodes can't be serialised.
 
 **Configuration.** Tailwind v4 is configured in CSS (`@import "tailwindcss"`, `@theme inline` in `app/globals.css`) and processed by `@tailwindcss/turbopack`. `next.config.ts` enables `cacheComponents`, `partialPrefetching` and `experimental.agentFeedback`. The `@/*` path alias maps to the repo root in both `tsconfig.json` and `vitest.config.mts`.
 
-**Branching.** Work is delivered in phases, one branch each (`phase-13-chained-inequalities` was the latest). Each phase is tested by the owner, then pushed, opened as a PR into `master` and merged with `gh pr merge --merge`.
+**Branching.** Work is delivered in phases, one branch each (`phase-15-fields-and-graph-styles` was the latest). Each phase is tested by the owner, then pushed, opened as a PR into `master` and merged with `gh pr merge --merge`.
 
 | Phase | Delivered |
 | --- | --- |
@@ -305,13 +327,17 @@ The URL is updated with `history.replaceState` whenever equations, angle mode or
 | 11 | Curves and key points moved to the worker, touching zeros, 3D hover |
 | 12 | Arbitrary inequality regions, functions follow angle mode |
 | 13 | Chained inequalities |
+| 14 | `nDeriv`, `fnInt`, `solve`; maxima and minima on the graph; trace slope; sliders |
+| 15 | Slope and vector fields; Window panel (exact bounds, grid, axis numbers, titles); per-equation colour, line type and thickness; all in the share link |
 
 ## Extending the project
 
 **Recipes**
 
 - **New built-in function.** Implement it as a plain function in `lib/` with tests, then add it to the `math.import({...})` call in `buildEngine`. It then works in every angle mode, in graphs, programs and the worker.
-- **New plot kind.** Add a variant to `PlotSpec` and a branch in `compilePlot` (mind the classification order). If it is expensive, add a job kind to `PlotJob`/`PlotJobResult`, handle it in `computeJob`, list any typed arrays in `transferables`, and render the result with `usePlotJob` in a component under `components/graph/`.
+- **New function that binds a variable** (like `nDeriv`). Write it as a Math.js `rawArgs` function in `lib/math/calculusFunctions.ts`: compile its argument nodes (cached), evaluate them in a `BoundScope`, and add its name to `CALCULUS_FUNCTIONS` so `compileInVariables` accepts the bound variable.
+- **New plot kind.** Add a variant to `PlotSpec` and a branch in `compilePlot` (mind the classification order). If it is expensive, add a job kind to `PlotJob`/`PlotJobResult`, handle it in `computeJob`, list any typed arrays in `transferables`, and render the result with `usePlotJob` in a component under `components/graph/`. Accept a `style` prop and use `LINE_WIDTH_PX` and `dashArray` so the style picker applies to it.
+- **New share-link setting.** Add it to `GraphSettings` (or `EquationLook`), encode only non-default values in `encodeShareState`, validate it in `decodeShareState`, and add round-trip and invalid-value tests to `equations.test.ts`.
 - **New persisted setting.** Read it in `loadInitialState` (never in an effect) and write it in its own `useEffect`. Version the key (`gsc.<name>.v1`) and validate what you load.
 - **New tools tab.** Build a panel in `components/tools/`, keep its data in `Calculator` state, and pass it in the `tabs` array of `ToolsPanel`.
 
@@ -322,6 +348,7 @@ The URL is updated with `history.replaceState` whenever equations, angle mode or
 - Copy the scope into `graphScope` after any change, or graphs won't recompile.
 - Keep cursor positions out of `Equation`, so moving the cursor doesn't recompile curves.
 - Pass Mafs a measured numeric `width` and `height`; with `width="auto"` it renders nothing until its own `ResizeObserver` fires.
+- Don't read refs during render (React's lint rules flag it); read them in event handlers, as `Graph` does for the visible window.
 - Read the bundled Next.js docs in `node_modules/next/dist/docs/` before using Next.js APIs; version 16.4 differs from older releases.
 
 **Known quirks and limitations**
@@ -330,5 +357,7 @@ The URL is updated with `history.replaceState` whenever equations, angle mode or
 - Programs called from graphs stop after 2,000 steps per call on the main thread, 10,000 in the worker.
 - Exact forms only cover fractions and rational multiples of √n and π; anything else shows as a decimal.
 - Unit names collide with functions: `min` is the function (use `minute`); `mph` is undefined (use `mi/h`).
-- In headless Edge, after a scripted click that remounts Mafs, wait 100 ms before polling in the same `Runtime.evaluate`, or worker answers can miss the poll window. Real input doesn't show this.
+- With an exact window (no padding), axis numbers that fall right on the edge are slightly clipped.
+- Panning and zooming aren't written to the share URL; only an applied window is. Slider ranges and variable values aren't saved.
+- In headless Edge, after a scripted click that remounts Mafs, wait 100 ms before polling in the same `Runtime.evaluate`, or worker answers and new axis labels can miss the poll window. Real input doesn't show this.
 - On mobile the top-level grid needs `grid-cols-1`, or the six-tab tools bar widens the page.
