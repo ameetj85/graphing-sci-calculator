@@ -3,7 +3,7 @@
 import { Mafs, Point as MafsPoint } from "mafs";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatCoordinate, nearestDefinedX } from "@/lib/graph/keyPoints";
-import type { Comparison } from "@/lib/graph/plotSpec";
+import type { Comparison, RegionCondition } from "@/lib/graph/plotSpec";
 import type { Point } from "@/lib/graph/sample";
 import type { ScopeSnapshot } from "@/lib/graph/scopeSnapshot";
 import type { AngleMode, PlotFunction, Scope } from "@/lib/math/engine";
@@ -49,7 +49,7 @@ export type GraphShape = { id: string; color: string } & (
   /** F(x, y) = 0, traced in the plotting worker. */
   | { kind: "implicit"; source: string }
   /** F(x, y) op 0, shaded in the plotting worker. */
-  | { kind: "region"; source: string; op: Comparison }
+  | { kind: "region"; conditions: RegionCondition[] }
 );
 
 const MAX_DATA_POINTS = 500;
@@ -123,8 +123,7 @@ export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoi
             ) : shape.kind === "region" ? (
               <ImplicitRegion
                 key={shape.id}
-                source={shape.source}
-                op={shape.op}
+                conditions={shape.conditions}
                 color={shape.color}
                 scope={scope}
                 snapshot={snapshot}

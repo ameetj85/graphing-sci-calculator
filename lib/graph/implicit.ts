@@ -113,7 +113,8 @@ export function traceImplicit(
       const left = pa !== pd ? crossing(x0, y0, a, x0, y1, d) : null;
 
       const add = (p: [number, number] | null, q: [number, number] | null) => {
-        if (p && q) out.push(p[0], p[1], q[0], q[1]);
+        // A curve through a grid node gives zero-length segments there; they would split joined lines.
+        if (p && q && (p[0] !== q[0] || p[1] !== q[1])) out.push(p[0], p[1], q[0], q[1]);
       };
       const count = Number(pa !== pb) + Number(pb !== pc) + Number(pd !== pc) + Number(pa !== pd);
       if (count === 4) {
@@ -137,7 +138,12 @@ export function traceImplicit(
 
 /** SVG path data for segments from traceImplicit. */
 export function segmentsPath(segments: Float64Array): string {
-  return joinSegments(segments)
+  return polylinesPath(joinSegments(segments));
+}
+
+/** SVG path data for polylines [x1, y1, x2, y2, …]. */
+export function polylinesPath(lines: number[][]): string {
+  return lines
     .map((line) => {
       let d = `M${line[0]} ${line[1]}`;
       for (let k = 2; k + 1 < line.length; k += 2) d += `L${line[k]} ${line[k + 1]}`;

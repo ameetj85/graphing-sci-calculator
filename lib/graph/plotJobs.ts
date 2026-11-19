@@ -3,9 +3,9 @@
  * worker (lib/graph/plot.worker.ts) or, as a fallback, on the main thread.
  */
 import { compileInVariables, type AngleMode, type Scope } from "@/lib/math/engine";
-import { segmentsPath, traceImplicit } from "./implicit";
-import type { Comparison } from "./plotSpec";
-import { shadeRegion } from "./region";
+import { polylinesPath, traceImplicit } from "./implicit";
+import type { Comparison, RegionCondition } from "./plotSpec";
+import { regionBoundaries, shadeRegion, type Condition } from "./region";
 import { findKeyPoints, type KeyPoint } from "./keyPoints";
 import { sampleFunction, segmentsToPath } from "./sample";
 import { restoreScope, type ScopeSnapshot } from "./scopeSnapshot";
@@ -18,8 +18,8 @@ type Bounds = { xMin: number; xMax: number; yMin: number; yMax: number };
 export type CurveJob = { kind: "curve"; source: string; samples: number } & Bounds;
 /** Roots of each curve and intersections of each pair. */
 export type KeyPointsJob = { kind: "keyPoints"; curves: { id: string; source: string }[] } & Bounds;
-/** Shades F(x, y) op 0 and traces its boundary F = 0. */
-export type RegionJob = { kind: "region"; source: string; op: Comparison; cols: number; rows: number } & Bounds;
+/** Shades where every condition F(x, y) op 0 holds and traces each edge F = 0. */
+export type RegionJob = { kind: "region"; conditions: RegionCondition[]; cols: number; rows: number } & Bounds;
 export type PlotJob = (SurfaceJob | ImplicitJob | CurveJob | KeyPointsJob | RegionJob) & { angleMode: AngleMode; scope: ScopeSnapshot };
 
 export type SurfaceGrid = { id: string; z: Float64Array } | { id: string; error: string };
@@ -28,7 +28,8 @@ export type PlotJobResult =
   | { kind: "implicit"; segments: Float64Array }
   | { kind: "curve"; path: string }
   | { kind: "keyPoints"; points: KeyPoint[] }
-  | { kind: "region"; fill: string; boundary: string }
+  /** One boundary per condition; strict ones (< and >) are drawn dashed. */
+  | { kind: "region"; fill: string; boundaries: { path: string; strict: boolean }[] }
   | { kind: "error"; error: string };
 
 /**
@@ -58,19 +59,29 @@ export function computeJob(job: PlotJob, scope?: Scope): PlotJobResult {
     });
     return { kind: "keyPoints", points: findKeyPoints(curves, job.xMin, job.xMax, job.yMin, job.yMax) };
   }
-  const f = compileInVariables(job.source, ["x", "y"], live, job.angleMode);
-  if (!f.ok) return { kind: "error", error: f.error };
   if (job.kind === "region") {
-    const F = (x: number, y: number) => f.fn(x, y);
+    const conditions: Condition[] = [];
+    for (const { source, op } of job.conditions) {
+      const f = compileInVariables(source, ["x", "y"], live, job.angleMode);
+      if (!f.ok) return { kind: "error", error: f.error };
+      conditions.push({ F: (x: number, y: number) => f.fn(x, y), op });
+    }
     const { xMin, xMax, yMin, yMax, cols, rows } = job;
     return {
       kind: "region",
-      fill: shadeRegion(F, job.op, xMin, xMax, yMin, yMax, cols, rows),
-      boundary: segmentsPath(traceImplicit(F, xMin, xMax, yMin, yMax, cols, rows)),
+      fill: shadeRegion(conditions, xMin, xMax, yMin, yMax, cols, rows),
+      boundaries: regionBoundaries(conditions, xMin, xMax, yMin, yMax, cols, rows).map((lines, i) => ({
+        path: polylinesPath(lines),
+        strict: isStrict(job.conditions[i].op),
+      })),
     };
   }
+  const f = compileInVariables(job.source, ["x", "y"], live, job.angleMode);
+  if (!f.ok) return { kind: "error", error: f.error };
   return { kind: "implicit", segments: traceImplicit(f.fn, job.xMin, job.xMax, job.yMin, job.yMax, job.cols, job.rows) };
 }
+
+const isStrict = (op: Comparison) => op === "<" || op === ">";
 
 /** Buffers to transfer (not copy) when posting a result back. */
 export function transferables(result: PlotJobResult): ArrayBuffer[] {

@@ -75,7 +75,9 @@ export function runPlotJob(job: PlotJob, scope: Scope): PlotHandle {
       ? job.items.map((i) => i.source).join(" ")
       : job.kind === "keyPoints"
         ? job.curves.map((c) => c.source).join(" ")
-        : job.source;
+        : job.kind === "region"
+          ? job.conditions.map((c) => c.source).join(" ")
+          : job.source;
   const target = needsMissing(sources, job.scope) ? null : getWorker();
 
   if (!target) {
