@@ -13,6 +13,7 @@ export type SliderRange = { min: number; max: number; step: number };
 const GRAPH_VARIABLES = new Set(["x", "y", "z", "r", "t", "theta", "ans"]);
 
 const IDENTIFIER = /[A-Za-z_][A-Za-z0-9_]*/g;
+const SLOPE_FIELD_PREFIX = /^\s*dy\s*\/\s*dx\s*=/;
 
 /**
  * Identifiers in the equation texts in order of first appearance, skipping
@@ -20,7 +21,9 @@ const IDENTIFIER = /[A-Za-z_][A-Za-z0-9_]*/g;
  */
 export function equationIdentifiers(texts: string[]): { name: string; called: boolean }[] {
   const seen = new Map<string, { name: string; called: boolean }>();
-  for (const text of texts) {
+  for (const fullText of texts) {
+    // The dy/dx of a slope field is notation, not two variables.
+    const text = fullText.replace(SLOPE_FIELD_PREFIX, (prefix) => " ".repeat(prefix.length));
     for (const match of text.matchAll(IDENTIFIER)) {
       const name = match[0];
       const start = match.index;
