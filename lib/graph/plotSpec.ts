@@ -43,6 +43,8 @@ export type PlotSpec =
     }
   /** F(x, y) = 0, traced off the main thread. `source` is F. */
   | { kind: "implicit"; source: string; tex: string }
+  /** The region F(x, y) op 0 (x > 2, x^2 + y^2 < 4), shaded off the main thread. `source` is F. */
+  | { kind: "region"; source: string; op: Comparison; tex: string }
   /** z = f(x, y). `source` is f. */
   | { kind: "surface"; source: string; tex: string };
 
@@ -57,6 +59,29 @@ const normalizeOp = (op: string): Comparison => (op === "≤" ? "<=" : op === "�
 const flipOp = (op: Comparison): Comparison => ({ "<": ">", "<=": ">=", ">": "<", ">=": "<=" })[op] as Comparison;
 const OP_TEX: Record<Comparison, string> = { "<": "<", "<=": "\\le", ">": ">", ">=": "\\ge" };
 
+
+/**
+ * Splits an inequality at its single top-level comparison (<, <=, >, >=, ≤,
+ * ≥). Returns null if there isn't exactly one, or for == and !=.
+ */
+export function splitComparison(source: string): { lhs: string; op: Comparison; rhs: string } | null {
+  let depth = 0;
+  let found: { at: number; length: number; op: Comparison } | null = null;
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") depth--;
+    else if (depth === 0 && (c === "<" || c === ">" || c === "≤" || c === "≥")) {
+      if (found) return null;
+      const orEqual = source[i + 1] === "=";
+      const op = c === "≤" ? "<=" : c === "≥" ? ">=" : ((orEqual ? `${c}=` : c) as Comparison);
+      found = { at: i, length: orEqual ? 2 : 1, op };
+      i += found.length - 1;
+    }
+  }
+  if (!found) return null;
+  return { lhs: source.slice(0, found.at).trim(), op: found.op, rhs: source.slice(found.at + found.length).trim() };
+}
 
 /** Splits on commas that are not inside parentheses or brackets. */
 export function splitTopLevel(source: string): string[] {
@@ -225,14 +250,29 @@ export function compilePlot(text: string, scope: Scope, angleMode: AngleMode): P
     }
   }
 
+  // y > f(x) is shaded exactly from the curve; other inequalities from a grid.
   const yFirst = body.match(Y_FIRST);
   const yLast = yFirst ? null : body.match(Y_LAST);
-  if (yFirst || yLast) {
+  const yExpr = yFirst ? yFirst[2] : yLast?.[1];
+  if (yExpr !== undefined && !/\by\b/.test(yExpr) && splitComparison(body)) {
     const op = yFirst ? normalizeOp(yFirst[1]) : flipOp(normalizeOp(yLast![2]));
-    const expr = yFirst ? yFirst[2] : yLast![1];
-    const f = compileIn(expr, "x", scope, angleMode);
+    const f = compileIn(yExpr, "x", scope, angleMode);
     if (!f.ok) return f;
     return { ok: true, spec: { kind: "inequality", fn: f.fn, op, tex: `y ${OP_TEX[op]} ${f.tex}` } };
+  }
+
+  const comparison = splitComparison(body);
+  if (comparison) {
+    const { lhs, op, rhs } = comparison;
+    if (!lhs || !rhs) return { ok: false, error: `Write an expression on both sides of ${op}` };
+    const left = compileInVariables(lhs, ["x", "y"], scope, angleMode);
+    if (!left.ok) return left;
+    const right = compileInVariables(rhs, ["x", "y"], scope, angleMode);
+    if (!right.ok) return right;
+    return {
+      ok: true,
+      spec: { kind: "region", source: `(${lhs}) - (${rhs})`, op, tex: `${left.tex} ${OP_TEX[op]} ${right.tex}` },
+    };
   }
 
   const f = compileFunction(body, scope, angleMode);

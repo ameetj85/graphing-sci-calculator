@@ -268,6 +268,20 @@ export function functionDefinition(value: unknown): FunctionDefinition | null {
   return typeof value === "function" ? ((value as unknown as Record<symbol, FunctionDefinition>)[DEFINITION] ?? null) : null;
 }
 
+/**
+ * Redefines the user's functions (from `f(x) = …`) in another angle mode, so
+ * a function using sin follows the DEG/RAD/GRAD setting like everything else.
+ * Returns the names that were redefined.
+ */
+export function rebindFunctions(scope: Scope, angleMode: AngleMode): string[] {
+  const stale = [...scope].flatMap(([name, value]) => {
+    const definition = functionDefinition(value);
+    return definition && definition.angleMode !== angleMode ? [{ name, source: definition.source }] : [];
+  });
+  for (const { source } of stale) evaluateExpression(source, scope, angleMode);
+  return stale.map((s) => s.name);
+}
+
 /** True for a Math.js matrix; `toArray` gives its plain nested-array form. */
 export function isMatrix(value: unknown): value is { toArray: () => unknown[] } {
   return typeof value === "object" && value !== null && (value as { isMatrix?: boolean }).isMatrix === true;
