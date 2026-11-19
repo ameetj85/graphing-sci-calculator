@@ -43,8 +43,11 @@ export type PlotSpec =
     }
   /** F(x, y) = 0, traced off the main thread. `source` is F. */
   | { kind: "implicit"; source: string; tex: string }
-  /** The region F(x, y) op 0 (x > 2, x^2 + y^2 < 4), shaded off the main thread. `source` is F. */
-  | { kind: "region"; source: string; op: Comparison; tex: string }
+  /**
+   * The region where every condition F(x, y) op 0 holds (x > 2, 1 < x < 2,
+   * x^2 + y^2 < 4), shaded off the main thread.
+   */
+  | { kind: "region"; conditions: RegionCondition[]; tex: string }
   /** z = f(x, y). `source` is f. */
   | { kind: "surface"; source: string; tex: string };
 
@@ -65,23 +68,39 @@ const OP_TEX: Record<Comparison, string> = { "<": "<", "<=": "\\le", ">": ">", "
  * ≥). Returns null if there isn't exactly one, or for == and !=.
  */
 export function splitComparison(source: string): { lhs: string; op: Comparison; rhs: string } | null {
+  const chain = splitComparisons(source);
+  if (!chain || chain.ops.length !== 1) return null;
+  return { lhs: chain.parts[0], op: chain.ops[0], rhs: chain.parts[1] };
+}
+
+/**
+ * Splits a chain such as `1 < x <= 2` at its top-level comparisons: parts
+ * ["1", "x", "2"] and ops ["<", "<="]. Returns null if there are none.
+ */
+export function splitComparisons(source: string): { parts: string[]; ops: Comparison[] } | null {
   let depth = 0;
-  let found: { at: number; length: number; op: Comparison } | null = null;
+  let start = 0;
+  const parts: string[] = [];
+  const ops: Comparison[] = [];
   for (let i = 0; i < source.length; i++) {
     const c = source[i];
     if (c === "(" || c === "[" || c === "{") depth++;
     else if (c === ")" || c === "]" || c === "}") depth--;
     else if (depth === 0 && (c === "<" || c === ">" || c === "≤" || c === "≥")) {
-      if (found) return null;
       const orEqual = source[i + 1] === "=";
-      const op = c === "≤" ? "<=" : c === "≥" ? ">=" : ((orEqual ? `${c}=` : c) as Comparison);
-      found = { at: i, length: orEqual ? 2 : 1, op };
-      i += found.length - 1;
+      ops.push(c === "≤" ? "<=" : c === "≥" ? ">=" : ((orEqual ? `${c}=` : c) as Comparison));
+      parts.push(source.slice(start, i).trim());
+      start = i + (orEqual ? 2 : 1);
+      i = start - 1;
     }
   }
-  if (!found) return null;
-  return { lhs: source.slice(0, found.at).trim(), op: found.op, rhs: source.slice(found.at + found.length).trim() };
+  if (ops.length === 0) return null;
+  parts.push(source.slice(start).trim());
+  return { parts, ops };
 }
+
+/** One condition of a shaded region: F(x, y) op 0. */
+export type RegionCondition = { source: string; op: Comparison };
 
 /** Splits on commas that are not inside parentheses or brackets. */
 export function splitTopLevel(source: string): string[] {
@@ -261,18 +280,23 @@ export function compilePlot(text: string, scope: Scope, angleMode: AngleMode): P
     return { ok: true, spec: { kind: "inequality", fn: f.fn, op, tex: `y ${OP_TEX[op]} ${f.tex}` } };
   }
 
-  const comparison = splitComparison(body);
-  if (comparison) {
-    const { lhs, op, rhs } = comparison;
-    if (!lhs || !rhs) return { ok: false, error: `Write an expression on both sides of ${op}` };
-    const left = compileInVariables(lhs, ["x", "y"], scope, angleMode);
-    if (!left.ok) return left;
-    const right = compileInVariables(rhs, ["x", "y"], scope, angleMode);
-    if (!right.ok) return right;
-    return {
-      ok: true,
-      spec: { kind: "region", source: `(${lhs}) - (${rhs})`, op, tex: `${left.tex} ${OP_TEX[op]} ${right.tex}` },
-    };
+  // Any other inequality, including chains such as 1 < x < 2: shade where every comparison holds.
+  const chain = splitComparisons(body);
+  if (chain) {
+    const { parts, ops } = chain;
+    const empty = parts.findIndex((part) => !part);
+    if (empty !== -1) {
+      return { ok: false, error: `Write an expression on both sides of ${ops[Math.min(empty, ops.length - 1)]}` };
+    }
+    const texParts: string[] = [];
+    for (const part of parts) {
+      const compiled = compileInVariables(part, ["x", "y"], scope, angleMode);
+      if (!compiled.ok) return compiled;
+      texParts.push(compiled.tex.trim());
+    }
+    const conditions = ops.map((op, i): RegionCondition => ({ source: `(${parts[i]}) - (${parts[i + 1]})`, op }));
+    const tex = texParts.map((t, i) => (i === 0 ? t : `${OP_TEX[ops[i - 1]]} ${t}`)).join(" ");
+    return { ok: true, spec: { kind: "region", conditions, tex } };
   }
 
   const f = compileFunction(body, scope, angleMode);

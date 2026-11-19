@@ -57,38 +57,37 @@ describe("inequality classification", () => {
 
   it("keeps F and the comparison for the worker", () => {
     const r = compilePlot("x^2 + y^2 < 4", createScope(), "rad");
-    expect(r.ok && r.spec.kind === "region" && [r.spec.source, r.spec.op]).toEqual(["(x^2 + y^2) - (4)", "<"]);
+    expect(r.ok && r.spec.kind === "region" && r.spec.conditions).toEqual([{ source: "(x^2 + y^2) - (4)", op: "<" }]);
     expect(r.ok && r.spec.tex).toContain("<");
   });
 });
 
 describe("region shading", () => {
   it("covers a half-plane exactly", () => {
-    expect(pathArea(shadeRegion((x) => x - 2, ">", 0, 4, 0, 2, 8, 4))).toBeCloseTo(4, 9);
-    expect(pathArea(shadeRegion((x) => x - 2.3, "<=", 0, 4, 0, 2, 8, 4))).toBeCloseTo(4.6, 9);
+    expect(pathArea(shadeRegion([{ F: (x) => x - 2, op: ">" }], 0, 4, 0, 2, 8, 4))).toBeCloseTo(4, 9);
+    expect(pathArea(shadeRegion([{ F: (x) => x - 2.3, op: "<=" }], 0, 4, 0, 2, 8, 4))).toBeCloseTo(4.6, 9);
   });
 
   it("covers a disc to within the grid resolution", () => {
-    const area = pathArea(shadeRegion((x, y) => x * x + y * y - 4, "<", -3, 3, -3, 3, 120, 120));
+    const area = pathArea(shadeRegion([{ F: (x, y) => x * x + y * y - 4, op: "<" }], -3, 3, -3, 3, 120, 120));
     expect(area).toBeGreaterThan(4 * Math.PI * 0.99);
     expect(area).toBeLessThan(4 * Math.PI * 1.01);
   });
 
   it("covers nothing or everything when the inequality never or always holds", () => {
-    expect(shadeRegion((x, y) => x * x + y * y + 1, "<", -1, 1, -1, 1, 10, 10)).toBe("");
-    expect(pathArea(shadeRegion((x, y) => x * x + y * y + 1, ">", -1, 1, -1, 1, 10, 10))).toBeCloseTo(4, 9);
+    expect(shadeRegion([{ F: (x, y) => x * x + y * y + 1, op: "<" }], -1, 1, -1, 1, 10, 10)).toBe("");
+    expect(pathArea(shadeRegion([{ F: (x, y) => x * x + y * y + 1, op: ">" }], -1, 1, -1, 1, 10, 10))).toBeCloseTo(4, 9);
   });
 
   it("leaves out undefined points", () => {
     // sqrt(x) > 1 holds only for x > 1; x < 0 is undefined.
-    expect(pathArea(shadeRegion((x) => Math.sqrt(x) - 1, ">", -2, 2, 0, 1, 40, 2))).toBeCloseTo(1, 1);
+    expect(pathArea(shadeRegion([{ F: (x) => Math.sqrt(x) - 1, op: ">" }], -2, 2, 0, 1, 40, 2))).toBeCloseTo(1, 1);
   });
 
   it("runs as a worker job with a boundary", () => {
     const result = computeJob({
       kind: "region",
-      source: "(x) - (2)",
-      op: ">",
+      conditions: [{ source: "(x) - (2)", op: ">" }],
       xMin: 0,
       xMax: 4,
       yMin: 0,
@@ -100,7 +99,7 @@ describe("region shading", () => {
     });
     expect(result.kind === "region" && pathArea(result.fill)).toBeCloseTo(4, 9);
     // The boundary x = 2 comes back as one joined line.
-    expect(result.kind === "region" && result.boundary.match(/M/g)?.length).toBe(1);
+    expect(result.kind === "region" && result.boundaries.map((b) => [b.path.match(/M/g)?.length, b.strict])).toEqual([[1, true]]);
   });
 });
 
