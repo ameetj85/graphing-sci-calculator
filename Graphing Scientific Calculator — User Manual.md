@@ -11,7 +11,7 @@ Type an expression, press **Enter**, and the result appears under the input. Gra
 | Card | Position | What it holds |
 | --- | --- | --- |
 | Calculator | Top left | Expression input, angle unit (DEG/RAD/GRAD), formatted preview, result, keypad, shortcut list |
-| Graph | Top right | Equation rows, 2D/3D switch, Trace selector, Roots & intersections toggle, Copy link to graph, the graph |
+| Graph | Top right | Equation rows (each with a style button), sliders, 2D/3D switch, Trace selector, Key points toggle, Copy link to graph, and the graph with its Window, Trig view and Reset view buttons |
 | History | Bottom left | Past calculations; reuse an expression or insert a result |
 | Tools | Bottom right | Tabs: Table, Statistics, Matrices, Units, Variables, Programs |
 
@@ -19,8 +19,9 @@ Type an expression, press **Enter**, and the result appears under the input. Gra
 
 1. Click the **Expression** box and type `2 + 3 * 4`. The preview shows the formatted maths.
 2. Press **Enter** (or the **=** key). The result shows `14`, with `2 + 3 * 4 =` above it.
-3. In the graph card, type `x^2 - 4` in an equation row. The parabola appears at once, with dots at its roots (-2, 0) and (2, 0).
-4. Click **+ Add** (below the rows) to plot up to 6 equations together.
+3. In the graph card, type `x^2 - 4` in an equation row. The parabola appears at once, with dots at its roots (-2, 0) and (2, 0) and its minimum (0, -4).
+4. Click **+ Add equation** (below the rows) to plot up to 6 equations together.
+5. Type `a sin(x)` in a new row and click **+ a** under the equations: a slider for `a` appears, and dragging it reshapes the curve.
 
 The keypad always types into the input you used last; the line “Keypad types into …” above it tells you which.
 
@@ -178,6 +179,40 @@ Also available: `sec`, `csc`, `cot` and inverses `asec`, `acsc`, `acot`; hyperbo
 
 The full Math.js function library is available apart from a few disabled for safety (`evaluate`, `parse`, `import`, `simplify`, `derivative` and similar); calling one gives *Function … is disabled*.
 
+## Calculus and solving equations
+
+Three functions cover derivatives, definite integrals and equation solving. The second argument names the variable, which exists only inside the function, so it never changes a variable of yours with the same name. They follow the angle mode and work in graphs as well as in the Expression input.
+
+| Function | Meaning |
+| --- | --- |
+| `nDeriv(expr, var, a)` | Derivative of expr with respect to var, at var = a |
+| `fnInt(expr, var, a, b)` | Definite integral of expr from a to b |
+| `solve(expr, var, guess)` | A root of expr (where it equals 0) near guess |
+| `solve(expr, var, a, b)` | A root between a and b; expr must change sign there |
+
+**Examples** (RAD mode)
+
+| Input | Output |
+| --- | --- |
+| `nDeriv(x^2, x, 3)` | `6` |
+| `nDeriv(sin(t), t, 0)` | `1` |
+| `fnInt(x^2, x, 0, 3)` | `9` |
+| `fnInt(sin(x), x, 0, pi)` | `2` |
+| `fnInt(1/x, x, 1, e)` | `1` |
+| `solve(x^3 - 2x - 5, x, 2)` | `2.09455148154` |
+| `solve(x^2 - 2, x, 0, 5)` | `√2` (≈ 1.41421356237) |
+| `solve(cos(x) == x, x, 1)` | `0.739085133215` |
+
+**Equations.** Write an equation with `==` to solve it as it stands: `solve(cos(x) == x, x, 1)` finds where cos x = x.
+
+**Your own functions and variables.** After `f(x) = x^3 - 3x`, `nDeriv(f(x), x, 2)` gives `9`. Variables work too: after `a = 3`, `nDeriv(a x^2, x, 2)` gives `12`.
+
+**Angle mode.** In DEG mode, `nDeriv(sin(x), x, 0)` gives `0.0174532925199` (π/180), because x is measured in degrees.
+
+**In graphs.** `y = nDeriv(t^3, t, x)` draws the derivative 3x², and `y = fnInt(t, t, 0, x)` draws the running integral x²/2. Use a letter other than x for the inner variable.
+
+**Accuracy.** Derivatives use a five-point difference (about 10 correct digits). Integrals use adaptive Gauss–Kronrod quadrature, which also copes with integrable spikes at an end point: `fnInt(1/sqrt(x), x, 0, 1)` gives approximately 2. The solver tries Newton's method from the guess, then searches outward for a sign change.
+
 ## Angle modes and result formats
 
 **Angle unit.** The **DEG / RAD / GRAD** switch beside the Expression label sets how trig functions read and return angles. It applies everywhere: expressions, your own functions, programs, graphs and tables. The setting is remembered.
@@ -304,6 +339,7 @@ Type a function of `x` in an equation row; the graph redraws as you type. Writin
 
 - **+ Add equation** adds a row (up to 6).
 - The coloured dot hides or shows a row without deleting it.
+- The line button next to **×** opens the row's style: colour, line type and thickness (see *Window, axes and line styles*).
 - **×** removes the row.
 - A hint under each row says how it is read (e.g. *Polar, θ from 0 to 2π*). If the text can't be graphed, the error is shown instead, e.g. *Undefined symbol: k*.
 
@@ -313,21 +349,25 @@ Type a function of `x` in an equation row; the graph redraws as you type. Writin
 | --- | --- |
 | Pan | Drag, or arrow keys when the graph has focus |
 | Zoom | Scroll wheel or pinch |
+| Exact bounds | **Window**: type x and y limits (see *Window, axes and line styles*) |
 | Standard window | **Reset view**: x from -10 to 10, y from -6 to 6 |
 | Trig window | **Trig view**: x from -2π to 2π (RAD), -360° to 360° (DEG) or -400 to 400 (GRAD); y from -2 to 2 |
 
 Grid lines and labels re-space themselves as you zoom.
 
-**Roots and intersections.** With **Roots & intersections** ticked, dots mark where each function crosses (or touches) the x-axis and where any two functions meet, within the visible window. Hover a dot to see its coordinates; click it to pin the label.
+**Key points.** With **Key points** ticked, dots mark, within the visible window: where each function crosses or touches the x-axis (roots), its local maxima and minima, and where any two functions meet. Hover a dot to see what it is, such as *Maximum of y₁ at (-1, 2)*; click it to pin its coordinates.
 
 | Equations | Dots shown |
 | --- | --- |
-| `x^2 - 4` | Roots at (-2, 0) and (2, 0) |
-| `x^2` | Touching root at (0, 0) |
-| `x^2` and `x + 2` | Roots of each, plus intersections (-1, 1) and (2, 4) |
-| `sin(x)` and `cos(x)` (RAD) | Intersections at x ≈ 0.785398, -2.35619, … |
+| `x^2 - 4` | Roots at (-2, 0) and (2, 0); minimum at (0, -4) |
+| `x^3 - 3x` | Roots at (-1.73205, 0), (0, 0) and (1.73205, 0); maximum at (-1, 2); minimum at (1, -2) |
+| `x^2` | Root at (0, 0) (a minimum that is also a root is shown once, as the root) |
+| `x^2` and `x + 2` | Roots of each, and intersections (-1, 1) and (2, 4) |
+| `sin(x)` and `cos(x)` (RAD) | Maxima, minima, roots, and intersections at x ≈ 0.785398, -2.35619, … |
 
-**Trace.** Choose a curve in the **Trace** list (Off, y₁, y₂, …). A point appears on that curve with its coordinates. Drag it, or focus it and use the arrow keys. Over a gap (such as `sqrt(x)` for x < 0) it jumps to the nearest x where the function is defined.
+Steps and asymptotes (`floor(x)`, `tan(x)`, `1/x`) never produce false maxima or minima.
+
+**Trace.** Choose a curve in the **Trace** list (Off, y₁, y₂, …). A point appears on that curve with its coordinates and slope, e.g. `(0, 0)  slope -3` on `x^3 - 3x`. Drag it, or focus it and use the arrow keys. Over a gap (such as `sqrt(x)` for x < 0) it jumps to the nearest x where the function is defined.
 
 **Table of values** (Tools → **Table**). Shows 11 rows of x and every visible function. **Start** (default -5) and **Step** (default 1) accept expressions such as `pi/4`. Undefined values show *undefined*.
 
@@ -340,7 +380,7 @@ Grid lines and labels re-space themselves as you zoom.
 
 The table and trace are linked: the row nearest the trace point is highlighted, clicking a row moves the trace point there (turning on trace for y₁ if it was off), and **Center on trace** recentres the table on the trace point.
 
-**Only `y = f(x)` rows** are traced, tabulated and searched for roots. Inequalities, implicit, parametric, polar and 3D rows are drawn but have no trace or table.
+**Only `y = f(x)` rows** are traced, tabulated and searched for key points. Inequalities, implicit, parametric, polar, field and 3D rows are drawn but have no trace or table.
 
 ## Other graph types
 
@@ -361,17 +401,21 @@ The same equation row draws every graph type; the calculator decides the type fr
 | `r = 1 + cos(θ)` | Polar | Cardioid |
 | `(cos(t), sin(t))` | Parametric | Unit circle |
 | `(t, t^2) {-2 <= t <= 2}` | Parametric | Parabola segment from (-2, 4) to (2, 4) |
+| `dy/dx = x - y` | Slope field | Short segments showing the slope at each grid point |
+| `field(-y, x)` | Vector field | Arrows circling the origin, darker where they are longer |
 | `z = sin(x) cos(y)` | 3D surface | Egg-crate surface in the 3D view |
 
 **Inequalities and regions.** Use `<`, `<=`, `>` or `>=` (or `≤`, `≥`). Strict comparisons (`<`, `>`) draw a dashed edge because the edge is not included; `<=` and `>=` draw a solid edge. A chain such as `1 < x < 2` shades where every comparison holds.
 
-**Implicit curves.** Any equation with a single `=` that isn't `y = f(x)` (or `r = …`, `z = …`) is drawn as the set of points where both sides are equal. Curves that touch zero without crossing, such as `(x^2 + y^2 - 4)^2 = 0`, are also found. A row like `y = y^2 + x` is implicit because `y` appears on the right.
+**Implicit curves.** Any equation with a single `=` that isn't `y = f(x)` (or `r = …`, `z = …`, `dy/dx = …`) is drawn as the set of points where both sides are equal. Curves that touch zero without crossing, such as `(x^2 + y^2 - 4)^2 = 0`, are also found. A row like `y = y^2 + x` is implicit because `y` appears on the right.
 
 **Polar curves.** Start with `r =` and use `theta`, `θ` or `t` as the angle. By default the angle runs one full turn in the current angle mode (0 to 2π, 0 to 360°, or 0 to 400 grad).
 
 **Parametric curves.** Write a pair `(x(t), y(t))`. By default `t` also runs over one full turn.
 
 **Custom range.** End a polar or parametric row with `{a <= t <= b}` (or `theta`), for example `r = theta {0 <= theta <= 6pi}` for a three-turn spiral.
+
+**Slope and vector fields.** `dy/dx = f(x, y)` draws a slope field: a short segment at each grid point with slope f(x, y), useful for sketching solutions of differential equations. `field(P, Q)` draws a vector field: an arrow at each grid point pointing along (P(x, y), Q(x, y)). Arrow length is fixed so the field stays readable; longer vectors are drawn darker. The grid of arrows re-spaces as you zoom, and arrows keep their direction when the axes have different scales. Your variables and sliders work in fields too, e.g. `dy/dx = k y`.
 
 **3D surfaces.** Type `z = f(x, y)`. In the 2D view the row's hint offers **Show 3D view**; or pick **3D** in the 2D/3D switch.
 
@@ -384,6 +428,53 @@ The same equation row draws every graph type; the calculator decides the type fr
 | Pin / unpin | Click to pin the point; **Esc** clears it |
 
 Several surfaces can be shown together, each in its row's colour. Examples: `z = x^2 - y^2` (saddle), `z = sqrt(x^2 + y^2)` (cone), `z = exp(-(x^2 + y^2)/10)` (bump).
+
+## Sliders
+
+When an equation uses a variable of your own, the graph card shows a slider for it, between the equation rows and the graph controls. Drag it and the graph redraws.
+
+1. Type `a sin(b x)` in an equation row. Because `a` and `b` aren't defined yet, **Add a slider: + a + b** appears under the equations.
+2. Click **+ a** and **+ b**. Each is set to 1 and gets a slider.
+3. Drag the **a** slider to 3: the wave becomes three times as tall. Drag **b** to 2: it oscillates twice as fast.
+
+Each slider row shows the name, a minimum field, the slider, a maximum field and a value field.
+
+| To | Do this |
+| --- | --- |
+| Set an exact value | Type it in the value field (after **=**) |
+| Change the range | Type new minimum and maximum values; the step adapts (0.1 for -10 to 10, 0.01 for 0 to 1) |
+| Get a slider for an existing variable | Use the variable in an equation: after `k = 2` in the Expression input, typing `k x` in a row shows a **k** slider |
+
+The default range is -10 to 10 in steps of 0.1; larger values get a wider range (for `a = 250`, -1000 to 1000). A slider changes the variable everywhere: the Expression input, the Variables tab and every equation that uses it.
+
+Graph coordinates (`x`, `y`, `z`, `r`, `t`, `theta`), built-in names (`pi`, `e`), function names, lists and matrices never get sliders. Slider ranges reset when you reload the page, and slider values, like other variables, are not saved.
+
+## Window, axes and line styles
+
+**Window panel.** Click **Window** at the top right of the graph. The panel opens with the bounds currently on screen.
+
+| Setting | What it does |
+| --- | --- |
+| x min, x max, y min, y max | Exact bounds; expressions work (`-pi`, `2pi`). **Apply window** shows exactly these bounds |
+| Grid lines | Shows or hides the grid; the axes stay |
+| Axis numbers | Shows or hides the numbers along the axes |
+| x-axis title, y-axis title | Text shown in the bottom-right and top-left corners of the graph (up to 40 characters) |
+
+Example: x min `-pi`, x max `2pi`, y min `-1.5`, y max `1.5` shows one and a half periods of `sin(x)`, edge to edge.
+
+Grid, numbers and titles apply as you change them. Press **Esc** or **×** to close the panel. A bound that isn't a number gives *Enter a number for x min (expressions such as 2pi work)*; a max not larger than its min gives *Each max must be larger than its min*.
+
+**Saved views.** An applied window and **Trig view** are kept in the share link. **Reset view** returns to x from -10 to 10 and y from -6 to 6 and clears the saved window. The default view adds a small margin, so the Window panel shows -10.5 to 10.5 until you apply bounds of your own. Panning and zooming change only what you see, not the saved window.
+
+**Line styles.** Click the line button next to an equation's **×** to open its style row. The button shows a preview of the current style.
+
+| Option | Choices |
+| --- | --- |
+| Colour | 6 colours |
+| Line type | Solid, Dashed, Dotted |
+| Thickness | Thin, Normal, Thick |
+
+Styles apply to every graph type. Edges of strict inequalities (`<`, `>`) stay dashed so you can still tell they aren't included. Fields use the colour and a lighter version of the thickness.
 
 ## Statistics, distributions and regression
 
@@ -571,15 +662,18 @@ Other limits: 64 nested program calls, 500 printed lines per run, 30 saved progr
 | `= result` (right) | Inserts the result at the cursor in the Expression box |
 | **Clear** | Empties the history |
 
-**Sharing a graph.** The page address always describes the current graph. Click **Copy link to graph** (it changes to *Link copied*) and send the link; opening it shows the same equations, angle mode and 2D/3D view.
+**Sharing a graph.** The page address always describes the current graph. Click **Copy link to graph** (it changes to *Link copied*) and send the link; opening it shows the same equations, angle mode, 2D/3D view, colours and line styles, window, grid and axis-number settings, and axis titles.
 
 | Graph | Link ends with |
 | --- | --- |
 | `sin(x)` and `x^2` | `?eq=sin%28x%29&eq=x%5E2` |
 | `sin(x)` in DEG mode | `?eq=sin%28x%29&angle=deg` |
 | `z = x^2 - y^2` in 3D | `?eq=z+%3D+x%5E2+-+y%5E2&view=3d` |
+| `x^2`, dashed, thick, fourth colour | `?eq=x%5E2&st=0.3d3` |
+| `sin(x)` with window -π to 2π, -1.5 to 1.5 | `?eq=sin%28x%29&win=-3.141592654%2C6.283185307%2C-1.5%2C1.5` |
+| Grid and axis numbers off, x-axis titled "time (s)" | `…&grid=0&nums=0&xl=time+%28s%29` |
 
-Links carry only the equations, angle mode and view. Variables, functions, lists, matrices and programs are not shared, so equations that use them (such as `y = a x`) need them defined on the other device.
+Links don't carry variables, functions, slider values, lists, matrices or programs, so equations that use them (such as `y = a x`) need them defined on the other device.
 
 **What is remembered on this device**
 
@@ -589,8 +683,9 @@ Links carry only the equations, angle mode and view. Variables, functions, lists
 | Angle mode, Exact/Decimal choice | You change them |
 | Lists L1, L2 and matrices A–F | You edit or delete them |
 | Programs | You delete them |
-| Variables and functions (`a = 3`, `f(x) = …`) | Page reload (not saved) |
-| Equations | Kept in the page address; bookmark it to keep them |
+| Variables, functions and slider values | Page reload (not saved) |
+| Slider ranges | Page reload (not saved) |
+| Equations, styles, window and axis settings | Kept in the page address; bookmark it to keep them |
 
 All of this is stored in your browser only. Private windows or blocked site storage start fresh each time.
 
@@ -607,6 +702,13 @@ All of this is stored in your browser only. Private windows or blocked site stor
 | *tan is undefined at 90°* | `tan(90)` in DEG | tan has no value at odd quarter turns |
 | *sin needs an angle, … got a value in rad^-1; write (pi/6) rad …* | `sin(pi/6 rad)` | `pi/6 rad` means `pi / (6 rad)`. Write `sin((pi/6) rad)` |
 | *cos needs an angle, such as 30 deg, but got a value in m* | `cos(5 m)` | sin, cos and tan take a plain number or an angle unit (`rad`, `deg`, `grad`) |
+| *nDeriv: the expression isn't defined around 0* | `nDeriv(sqrt(x), x, 0)` | The expression must be defined on both sides of the point |
+| *nDeriv: the second argument must be a variable name, …* | `nDeriv(x^2, 3, 1)` | Give the variable, then the point: `nDeriv(x^2, x, 3)` |
+| *fnInt: no result; is the expression undefined somewhere between -1 and 1?* | `fnInt(log(x), x, -1, 1)` | The expression must be defined across the whole interval |
+| *fnInt: the bounds must be finite* | `fnInt(x, x, 0, Infinity)` | Use finite bounds |
+| *solve: no root found near 0* | `solve(x^2 + 1, x, 0)` | There may be no real root; try another guess, or a bracket `solve(expr, x, a, b)` |
+| *solve: no root found between 2 and 5 (the expression must change sign there)* | `solve(x^2 - 2, x, 2, 5)` | Choose a bracket where the expression changes sign |
+| *A vector field has two parts: field(P(x, y), Q(x, y))* | `field(x)` | Give both components |
 | *Matrix must be square* | `det([[1,2,3],[4,5,6]])` | Determinant and inverse need square matrices |
 | *shape mismatch …* | `[1, 2] + [1, 2, 3]` | Vector and matrix sizes must agree |
 | *Function evaluate is disabled* | `evaluate("1+1")` | Some functions are switched off for safety |
@@ -622,7 +724,10 @@ All of this is stored in your browser only. Private windows or blocked site stor
 | Trig curve looks flat or squashed | The angle mode: in DEG, `sin(x)` has period 360; press **Trig view** |
 | A note says the calculator's `x` isn't used | You assigned `x` in the calculator. The graph always uses its own x; press **Remove x** or ignore it |
 | A `z = …` row draws nothing | Surfaces appear only in the 3D view: press **Show 3D view** |
-| No trace or table for a row | Only `y = f(x)` rows support trace, table and roots |
+| No trace, table or key points for a row | Only `y = f(x)` rows support trace, table and key points |
+| No slider for a variable | Sliders appear only for numbers used in an equation; graph coordinates (x, y, t, …) never get one |
+| Window panel shows -10.5 to 10.5 | The default view adds a margin; apply your own bounds for an exact window |
+| Grid or axis numbers missing | They were switched off in the **Window** panel (also kept in shared links) |
 | Can't add an equation | The limit is 6 rows; remove one first |
 | **Graph this fit** says *Remove an equation first* | Same 6-row limit |
 | A graph using a program has gaps | Calls that take too many steps are left out; simplify the program |
