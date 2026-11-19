@@ -195,7 +195,7 @@ export function Calculator() {
       const result = compiled[eq.id];
       if (!eq.visible || !result.ok) return;
       const { spec } = result;
-      if (spec.kind === "function") curves.push({ id: eq.id, name: equationName(index), fn: spec.fn, color: eq.color });
+      if (spec.kind === "function") curves.push({ id: eq.id, name: equationName(index), fn: spec.fn, source: spec.source, color: eq.color });
       else if (spec.kind === "inequality") shapes.push({ id: eq.id, color: eq.color, kind: "inequality", fn: spec.fn, op: spec.op });
       else if (spec.kind === "implicit") shapes.push({ id: eq.id, color: eq.color, kind: "implicit", source: spec.source });
       else if (spec.kind === "surface") surfaces.push({ id: eq.id, name: equationName(index), source: spec.source, color: eq.color });

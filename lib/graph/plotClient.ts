@@ -13,6 +13,8 @@ type Pending = { job: PlotJob; scope: Scope; sentAt: number; resolve: (result: P
 const RESTART_AFTER_MS = 1000;
 
 let worker: Worker | null | undefined;
+/** Set once the worker has returned a result, i.e. it has loaded. */
+let warm = false;
 let nextId = 1;
 const pending = new Map<number, Pending>();
 
@@ -25,6 +27,7 @@ function getWorker(): Worker | null {
   try {
     const created = new Worker(new URL("./plot.worker.ts", import.meta.url), { type: "module" });
     created.onmessage = (event: MessageEvent<{ id: number; result: PlotJobResult }>) => {
+      warm = true;
       const entry = pending.get(event.data.id);
       pending.delete(event.data.id);
       if (entry && !entry.cancelled) entry.resolve(event.data.result);
@@ -55,13 +58,25 @@ function restartIfStuck() {
   }
 }
 
+/**
+ * True once the worker is answering. Until then (while it loads, on first
+ * paint) callers may compute a first result on the main thread.
+ */
+export function isWorkerWarm(): boolean {
+  return warm && worker != null;
+}
+
 export type PlotHandle = { promise: Promise<PlotJobResult>; cancel: () => void; inWorker: boolean };
 
 /** Starts a job. `scope` is the live calculator scope, used for the main-thread fallback. */
 export function runPlotJob(job: PlotJob, scope: Scope): PlotHandle {
-  const target = needsMissing(job.kind === "surface" ? job.items.map((i) => i.source).join(" ") : job.source, job.scope)
-    ? null
-    : getWorker();
+  const sources =
+    job.kind === "surface"
+      ? job.items.map((i) => i.source).join(" ")
+      : job.kind === "keyPoints"
+        ? job.curves.map((c) => c.source).join(" ")
+        : job.source;
+  const target = needsMissing(sources, job.scope) ? null : getWorker();
 
   if (!target) {
     let cancelled = false;

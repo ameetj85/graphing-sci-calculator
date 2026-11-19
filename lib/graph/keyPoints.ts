@@ -2,6 +2,8 @@
  * Numerical roots and curve intersections over a visible x-range. Sign
  * changes between samples are refined by bisection, then verified so the
  * sign flip across an asymptote (tan x, 1/x) is not reported as a root.
+ * Roots where the curve touches zero without crossing ((x - 1)^2, or two
+ * tangent curves) are found as local minima of |h| that reach zero.
  */
 export type KeyPoint = {
   x: number;
@@ -14,6 +16,7 @@ export type KeyPoint = {
 export type Curve = { id: string; fn: (x: number) => number };
 
 const BISECT_STEPS = 60;
+const MINIMIZE_STEPS = 80;
 const MAX_POINTS = 60;
 
 /** x-values in [xMin, xMax] where h(x) = 0. `tolerance` bounds |h| at an accepted root. */
@@ -33,23 +36,59 @@ export function findZeros(
     if (zeros.length === 0 || Math.abs(x - zeros[zeros.length - 1]) > minGap) zeros.push(x);
   };
 
-  let prevX = xMin;
-  let prevH = h(xMin);
-  if (prevH === 0) push(xMin);
-
-  for (let i = 1; i <= samples; i++) {
+  const xs: number[] = [];
+  const hs: number[] = [];
+  for (let i = 0; i <= samples; i++) {
     const x = i === samples ? xMax : xMin + i * step;
-    const hx = h(x);
+    xs.push(x);
+    hs.push(h(x));
+  }
+
+  for (let i = 0; i <= samples; i++) {
+    const hx = hs[i];
     if (hx === 0) {
-      push(x);
-    } else if (Number.isFinite(prevH) && Number.isFinite(hx) && prevH !== 0 && Math.sign(prevH) !== Math.sign(hx)) {
-      const root = bisect(h, prevX, prevH, x);
-      if (root !== null && Math.abs(h(root)) <= tolerance) push(root);
+      push(xs[i]);
+      continue;
     }
-    prevX = x;
-    prevH = hx;
+    if (i > 0) {
+      const prevH = hs[i - 1];
+      if (Number.isFinite(prevH) && Number.isFinite(hx) && prevH !== 0 && Math.sign(prevH) !== Math.sign(hx)) {
+        const root = bisect(h, xs[i - 1], prevH, xs[i]);
+        if (root !== null && Math.abs(h(root)) <= tolerance) push(root);
+        continue;
+      }
+    }
+    // A touching root: |h| dips between neighbours of the same sign.
+    if (i > 0 && i < samples && isTouchCandidate(hs[i - 1], hx, hs[i + 1])) {
+      const x = minimizeAbs(h, xs[i - 1], xs[i + 1]);
+      if (x !== null && Math.abs(h(x)) <= tolerance) push(x);
+    }
   }
   return zeros;
+}
+
+/** True when |b| is a local minimum of three finite samples that don't change sign. */
+export function isTouchCandidate(a: number, b: number, c: number): boolean {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) return false;
+  if (a === 0 || c === 0 || Math.sign(a) !== Math.sign(c) || (b !== 0 && Math.sign(b) !== Math.sign(a))) return false;
+  return Math.abs(b) <= Math.abs(a) && Math.abs(b) <= Math.abs(c) && Math.abs(b) < Math.max(Math.abs(a), Math.abs(c));
+}
+
+/** Ternary search for the x in [a, b] where |h| is smallest; null if h is undefined there. */
+export function minimizeAbs(h: (x: number) => number, a: number, b: number, steps = MINIMIZE_STEPS): number | null {
+  let lo = a;
+  let hi = b;
+  for (let i = 0; i < steps; i++) {
+    const m1 = lo + (hi - lo) / 3;
+    const m2 = hi - (hi - lo) / 3;
+    const h1 = Math.abs(h(m1));
+    const h2 = Math.abs(h(m2));
+    if (!Number.isFinite(h1) || !Number.isFinite(h2)) return null;
+    if (h1 === 0) return m1;
+    if (h1 < h2) hi = m2;
+    else lo = m1;
+  }
+  return (lo + hi) / 2;
 }
 
 function bisect(h: (x: number) => number, a: number, ha: number, b: number): number | null {

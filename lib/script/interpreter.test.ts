@@ -3,11 +3,13 @@ import { createScope, evaluateExpression, formatValue } from "@/lib/math/engine"
 import {
   MAX_STEPS,
   MAX_STEPS_BACKGROUND,
+  MAX_STEPS_WORKER,
   captureOutput,
   isProgramFunction,
   parseProgram,
   registerPrograms,
   runProgram,
+  setBackgroundStepLimit,
   splitArguments,
   type Program,
 } from "./interpreter";
@@ -135,6 +137,20 @@ describe("programs as functions", () => {
       ok: false,
       error: expect.stringContaining(`Stopped after ${MAX_STEPS_BACKGROUND.toLocaleString("en-US")}`),
     });
+  });
+
+  it("lets the plotting worker raise the background limit", () => {
+    const scope = createScope();
+    registerPrograms(scope, [program("while true\nend", [], "spin")], "rad");
+    setBackgroundStepLimit(MAX_STEPS_WORKER);
+    try {
+      expect(evaluateExpression("spin()", scope)).toMatchObject({
+        ok: false,
+        error: expect.stringContaining(`Stopped after ${MAX_STEPS_WORKER.toLocaleString("en-US")}`),
+      });
+    } finally {
+      setBackgroundStepLimit(MAX_STEPS_BACKGROUND);
+    }
   });
 
   it("errors when a program used in an expression returns nothing", () => {

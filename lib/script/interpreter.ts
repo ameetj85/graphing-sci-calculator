@@ -41,6 +41,15 @@ export type RunResult =
 export const MAX_STEPS = 100_000;
 /** Lower limit for calls with nowhere to show output (graphs, tables), which call programs many times. */
 export const MAX_STEPS_BACKGROUND = 2_000;
+/** The same limit in the plotting worker, where a long run can't freeze the page. */
+export const MAX_STEPS_WORKER = 10_000;
+
+let backgroundSteps = MAX_STEPS_BACKGROUND;
+
+/** Raises the per-call limit for calls with nowhere to show output; the plotting worker uses MAX_STEPS_WORKER. */
+export function setBackgroundStepLimit(steps: number): void {
+  backgroundSteps = steps;
+}
 export const MAX_DEPTH = 64;
 export const MAX_OUTPUT_LINES = 500;
 
@@ -360,7 +369,7 @@ function call(program: Program, args: unknown[], globals: Scope, angleMode: Angl
   const outer = active;
   const context: RunContext = outer ?? {
     steps: 0,
-    maxSteps: sink ? MAX_STEPS : MAX_STEPS_BACKGROUND,
+    maxSteps: sink ? MAX_STEPS : backgroundSteps,
     depth: 0,
     output: sink,
   };

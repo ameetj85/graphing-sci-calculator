@@ -2,7 +2,17 @@
  * Implicit curves F(x, y) = 0 (from equations such as x^2 + y^2 = 4) by
  * marching squares: F is sampled on a grid, and each cell where F changes
  * sign gets a line segment between its edge crossings.
+ *
+ * Curves where F touches zero without changing sign, such as
+ * (x^2 + y^2 - 4)^2 = 0, have no sign changes to find. For those, each grid
+ * line is searched for places where |F| dips to zero between neighbours of
+ * the same sign; cells without a sign change join those points instead.
  */
+import { isTouchCandidate, minimizeAbs } from "./keyPoints";
+
+/** |F| at a touch point must be this small relative to the neighbouring samples. */
+const TOUCH_TOLERANCE = 1e-6;
+const TOUCH_STEPS = 50;
 
 /**
  * Returns line segments as a flat array [x1, y1, x2, y2, …]. Cells touching
@@ -29,6 +39,32 @@ export function traceImplicit(
     }
   }
 
+  // Touch points on grid lines, keyed by the edge they fall on.
+  // Horizontal edge (i, j) runs from node (i, j) to (i + 1, j); vertical edge (i, j) from (i, j) to (i, j + 1).
+  const hTouch = new Map<number, [number, number]>();
+  const vTouch = new Map<number, [number, number]>();
+  const findTouch = (line: (t: number) => number, t0: number, step: number, values: (k: number) => number, count: number, store: (k: number, t: number) => void) => {
+    for (let k = 1; k < count; k++) {
+      const a = values(k - 1);
+      const b = values(k);
+      const c = values(k + 1);
+      if (!isTouchCandidate(a, b, c)) continue;
+      const t = minimizeAbs(line, t0 + (k - 1) * step, t0 + (k + 1) * step, TOUCH_STEPS);
+      if (t === null) continue;
+      if (Math.abs(line(t)) <= TOUCH_TOLERANCE * Math.max(Math.abs(a), Math.abs(c))) {
+        store(Math.min(count - 1, Math.max(0, Math.floor((t - t0) / step))), t);
+      }
+    }
+  };
+  for (let j = 0; j <= rows; j++) {
+    const y = yMin + j * dy;
+    findTouch((x) => F(x, y), xMin, dx, (k) => values[j * stride + k], cols, (i, x) => hTouch.set(j * stride + i, [x, y]));
+  }
+  for (let i = 0; i <= cols; i++) {
+    const x = xMin + i * dx;
+    findTouch((y) => F(x, y), yMin, dy, (k) => values[k * stride + i], rows, (j, y) => vTouch.set(j * stride + i, [x, y]));
+  }
+
   const out: number[] = [];
   const positive = (v: number) => v >= 0;
 
@@ -53,7 +89,19 @@ export function traceImplicit(
       const pb = positive(b);
       const pc = positive(c);
       const pd = positive(d);
-      if (pa === pb && pb === pc && pc === pd) continue;
+      if (pa === pb && pb === pc && pc === pd) {
+        // No sign change: join any touch points on this cell's edges, in order around it.
+        const touches = [
+          hTouch.get(j * stride + i),
+          vTouch.get(j * stride + i + 1),
+          hTouch.get((j + 1) * stride + i),
+          vTouch.get(j * stride + i),
+        ].filter((p): p is [number, number] => p !== undefined);
+        for (let k = 0; k + 1 < touches.length; k += 2) {
+          out.push(touches[k][0], touches[k][1], touches[k + 1][0], touches[k + 1][1]);
+        }
+        continue;
+      }
 
       const x0 = xMin + i * dx;
       const y0 = yMin + j * dy;
