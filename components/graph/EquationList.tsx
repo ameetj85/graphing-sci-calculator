@@ -55,7 +55,7 @@ export function EquationList({
                 ? "Drawn in the 2D view"
                 : spec.kind === "polar" || spec.kind === "parametric"
                   ? `${spec.kind === "polar" ? "Polar" : "Parametric"}, ${spec.rangeLabel}. End with {-5 <= ${variable} <= 5} to change the range.`
-                  : spec.kind === "inequality"
+                  : spec.kind === "inequality" || spec.kind === "region"
                     ? `Shaded inequality${spec.op === "<" || spec.op === ">" ? " (dashed edge: not included)" : ""}`
                     : spec.kind === "implicit"
                       ? "Implicit curve"

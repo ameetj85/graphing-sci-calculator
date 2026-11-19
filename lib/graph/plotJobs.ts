@@ -3,7 +3,9 @@
  * worker (lib/graph/plot.worker.ts) or, as a fallback, on the main thread.
  */
 import { compileInVariables, type AngleMode, type Scope } from "@/lib/math/engine";
-import { traceImplicit } from "./implicit";
+import { segmentsPath, traceImplicit } from "./implicit";
+import type { Comparison } from "./plotSpec";
+import { shadeRegion } from "./region";
 import { findKeyPoints, type KeyPoint } from "./keyPoints";
 import { sampleFunction, segmentsToPath } from "./sample";
 import { restoreScope, type ScopeSnapshot } from "./scopeSnapshot";
@@ -16,7 +18,9 @@ type Bounds = { xMin: number; xMax: number; yMin: number; yMax: number };
 export type CurveJob = { kind: "curve"; source: string; samples: number } & Bounds;
 /** Roots of each curve and intersections of each pair. */
 export type KeyPointsJob = { kind: "keyPoints"; curves: { id: string; source: string }[] } & Bounds;
-export type PlotJob = (SurfaceJob | ImplicitJob | CurveJob | KeyPointsJob) & { angleMode: AngleMode; scope: ScopeSnapshot };
+/** Shades F(x, y) op 0 and traces its boundary F = 0. */
+export type RegionJob = { kind: "region"; source: string; op: Comparison; cols: number; rows: number } & Bounds;
+export type PlotJob = (SurfaceJob | ImplicitJob | CurveJob | KeyPointsJob | RegionJob) & { angleMode: AngleMode; scope: ScopeSnapshot };
 
 export type SurfaceGrid = { id: string; z: Float64Array } | { id: string; error: string };
 export type PlotJobResult =
@@ -24,6 +28,7 @@ export type PlotJobResult =
   | { kind: "implicit"; segments: Float64Array }
   | { kind: "curve"; path: string }
   | { kind: "keyPoints"; points: KeyPoint[] }
+  | { kind: "region"; fill: string; boundary: string }
   | { kind: "error"; error: string };
 
 /**
@@ -55,6 +60,15 @@ export function computeJob(job: PlotJob, scope?: Scope): PlotJobResult {
   }
   const f = compileInVariables(job.source, ["x", "y"], live, job.angleMode);
   if (!f.ok) return { kind: "error", error: f.error };
+  if (job.kind === "region") {
+    const F = (x: number, y: number) => f.fn(x, y);
+    const { xMin, xMax, yMin, yMax, cols, rows } = job;
+    return {
+      kind: "region",
+      fill: shadeRegion(F, job.op, xMin, xMax, yMin, yMax, cols, rows),
+      boundary: segmentsPath(traceImplicit(F, xMin, xMax, yMin, yMax, cols, rows)),
+    };
+  }
   return { kind: "implicit", segments: traceImplicit(f.fn, job.xMin, job.xMax, job.yMin, job.yMax, job.cols, job.rows) };
 }
 

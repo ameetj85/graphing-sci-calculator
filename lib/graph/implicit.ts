@@ -105,8 +105,8 @@ export function traceImplicit(
 
       const x0 = xMin + i * dx;
       const y0 = yMin + j * dy;
-      const x1 = x0 + dx;
-      const y1 = y0 + dy;
+      const x1 = xMin + (i + 1) * dx; // from the index, so neighbouring cells share exact coordinates
+      const y1 = yMin + (j + 1) * dy;
       const bottom = pa !== pb ? crossing(x0, y0, a, x1, y0, b) : null;
       const right = pb !== pc ? crossing(x1, y0, b, x1, y1, c) : null;
       const top = pd !== pc ? crossing(x0, y1, d, x1, y1, c) : null;
@@ -137,9 +137,56 @@ export function traceImplicit(
 
 /** SVG path data for segments from traceImplicit. */
 export function segmentsPath(segments: Float64Array): string {
-  const parts: string[] = [];
-  for (let k = 0; k + 3 < segments.length; k += 4) {
-    parts.push(`M${segments[k]} ${segments[k + 1]}L${segments[k + 2]} ${segments[k + 3]}`);
+  return joinSegments(segments)
+    .map((line) => {
+      let d = `M${line[0]} ${line[1]}`;
+      for (let k = 2; k + 1 < line.length; k += 2) d += `L${line[k]} ${line[k + 1]}`;
+      return d;
+    })
+    .join("");
+}
+
+/**
+ * Joins segments that share endpoints into polylines [x1, y1, x2, y2, …], so
+ * a dashed boundary dashes along the curve instead of restarting on every
+ * tiny segment. Neighbouring cells compute a shared crossing identically, so
+ * endpoints match exactly.
+ */
+export function joinSegments(segments: Float64Array): number[][] {
+  const count = Math.floor(segments.length / 4);
+  const key = (x: number, y: number) => `${x},${y}`;
+  const byPoint = new Map<string, number[]>();
+  const add = (k: string, index: number) => {
+    const list = byPoint.get(k);
+    if (list) list.push(index);
+    else byPoint.set(k, [index]);
+  };
+  for (let s = 0; s < count; s++) {
+    add(key(segments[4 * s], segments[4 * s + 1]), s);
+    add(key(segments[4 * s + 2], segments[4 * s + 3]), s);
   }
-  return parts.join("");
+
+  const used = new Uint8Array(count);
+  /** The far end of an unused segment touching (x, y), marking it used. */
+  const nextFrom = (x: number, y: number): [number, number] | null => {
+    for (const s of byPoint.get(key(x, y)) ?? []) {
+      if (used[s]) continue;
+      used[s] = 1;
+      const [ax, ay, bx, by] = [segments[4 * s], segments[4 * s + 1], segments[4 * s + 2], segments[4 * s + 3]];
+      return ax === x && ay === y ? [bx, by] : [ax, ay];
+    }
+    return null;
+  };
+
+  const lines: number[][] = [];
+  for (let s = 0; s < count; s++) {
+    if (used[s]) continue;
+    used[s] = 1;
+    const forward = [segments[4 * s], segments[4 * s + 1], segments[4 * s + 2], segments[4 * s + 3]];
+    for (let p = nextFrom(forward[2], forward[3]); p; p = nextFrom(p[0], p[1])) forward.push(p[0], p[1]);
+    const backward: number[] = [];
+    for (let p = nextFrom(forward[0], forward[1]); p; p = nextFrom(p[0], p[1])) backward.unshift(p[0], p[1]);
+    lines.push([...backward, ...forward]);
+  }
+  return lines;
 }

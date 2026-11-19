@@ -8,6 +8,7 @@ import type { Point } from "@/lib/graph/sample";
 import type { ScopeSnapshot } from "@/lib/graph/scopeSnapshot";
 import type { AngleMode, PlotFunction, Scope } from "@/lib/math/engine";
 import { ImplicitCurve } from "./ImplicitCurve";
+import { ImplicitRegion } from "./ImplicitRegion";
 import { AdaptiveGrid } from "./AdaptiveGrid";
 import { FunctionCurve } from "./FunctionCurve";
 import { InequalityRegion } from "./InequalityRegion";
@@ -47,6 +48,8 @@ export type GraphShape = { id: string; color: string } & (
   | { kind: "points"; points: Point[] }
   /** F(x, y) = 0, traced in the plotting worker. */
   | { kind: "implicit"; source: string }
+  /** F(x, y) op 0, shaded in the plotting worker. */
+  | { kind: "region"; source: string; op: Comparison }
 );
 
 const MAX_DATA_POINTS = 500;
@@ -73,11 +76,16 @@ export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoi
   const showView = (box: ViewBox) => setView((current) => ({ key: current.key + 1, box }));
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState(0);
+  // Mafs needs a numeric height. Passing the width too means a remounted
+  // Mafs (Trig view, Reset view) draws at once instead of waiting a frame
+  // for its own ResizeObserver before rendering any curves.
+  const [size, setSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
     const element = containerRef.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setHeight(Math.floor(entry.contentRect.height)));
+    const observer = new ResizeObserver(([entry]) =>
+      setSize({ width: Math.floor(entry.contentRect.width), height: Math.floor(entry.contentRect.height) }),
+    );
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
@@ -97,10 +105,11 @@ export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoi
       ref={containerRef}
       className="relative h-full w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800"
     >
-      {height > 0 && (
+      {size.width > 0 && size.height > 0 && (
         <Mafs
           key={view.key}
-          height={height}
+          width={size.width}
+          height={size.height}
           viewBox={view.box}
           preserveAspectRatio={false}
           pan
@@ -111,6 +120,16 @@ export function Graph({ curves, shapes, traceId, traceX, onTraceMove, showKeyPoi
           {shapes.map((shape) =>
             shape.kind === "inequality" ? (
               <InequalityRegion key={shape.id} fn={shape.fn} op={shape.op} color={shape.color} />
+            ) : shape.kind === "region" ? (
+              <ImplicitRegion
+                key={shape.id}
+                source={shape.source}
+                op={shape.op}
+                color={shape.color}
+                scope={scope}
+                snapshot={snapshot}
+                angleMode={angleMode}
+              />
             ) : null,
           )}
           {shapes.map((shape) =>

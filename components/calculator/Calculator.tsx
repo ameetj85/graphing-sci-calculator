@@ -22,6 +22,7 @@ import {
 } from "@/lib/graph/equations";
 import {
   createScope,
+  rebindFunctions,
   evaluateExpression,
   expressionToTex,
   formatValue,
@@ -198,6 +199,7 @@ export function Calculator() {
       if (spec.kind === "function") curves.push({ id: eq.id, name: equationName(index), fn: spec.fn, source: spec.source, color: eq.color });
       else if (spec.kind === "inequality") shapes.push({ id: eq.id, color: eq.color, kind: "inequality", fn: spec.fn, op: spec.op });
       else if (spec.kind === "implicit") shapes.push({ id: eq.id, color: eq.color, kind: "implicit", source: spec.source });
+      else if (spec.kind === "region") shapes.push({ id: eq.id, color: eq.color, kind: "region", source: spec.source, op: spec.op });
       else if (spec.kind === "surface") surfaces.push({ id: eq.id, name: equationName(index), source: spec.source, color: eq.color });
       else shapes.push({ id: eq.id, color: eq.color, kind: "curve", xy: spec.xy, tMin: spec.tMin, tMax: spec.tMax });
     });
@@ -232,6 +234,8 @@ export function Calculator() {
 
   function changeAngleMode(mode: AngleMode) {
     setAngleMode(mode);
+    // Functions from f(x) = … follow the new mode, like programs do.
+    rebindFunctions(scopeRef.current, mode);
     syncPrograms(programs, mode);
   }
 
