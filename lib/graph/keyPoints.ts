@@ -3,13 +3,16 @@
  * changes between samples are refined by bisection, then verified so the
  * sign flip across an asymptote (tan x, 1/x) is not reported as a root.
  * Roots where the curve touches zero without crossing ((x - 1)^2, or two
- * tangent curves) are found as local minima of |h| that reach zero.
+ * tangent curves) are found as local minima of |h| that reach zero. Local
+ * maxima and minima of each curve are found too.
  */
+import { findExtrema } from "@/lib/math/calculus";
+
 export type KeyPoint = {
   x: number;
   y: number;
-  kind: "root" | "intersection";
-  /** Ids of the curves involved: one for a root, two for an intersection. */
+  kind: "root" | "intersection" | "max" | "min";
+  /** Ids of the curves involved: two for an intersection, otherwise one. */
   curveIds: string[];
 };
 
@@ -110,7 +113,7 @@ function bisect(h: (x: number) => number, a: number, ha: number, b: number): num
   return (lo + hi) / 2;
 }
 
-/** Roots of each curve and intersections of each pair of curves in the range. */
+/** Roots, maxima and minima of each curve, and intersections of each pair of curves, in the range. */
 export function findKeyPoints(
   curves: Curve[],
   xMin: number,
@@ -122,9 +125,15 @@ export function findKeyPoints(
   const tolerance = Math.max(yMax - yMin, 1) * 1e-6;
   const points: KeyPoint[] = [];
 
+  const minGap = (xMax - xMin) / samples;
   for (const curve of curves) {
-    for (const x of findZeros(curve.fn, xMin, xMax, samples, tolerance)) {
-      points.push({ x, y: 0, kind: "root", curveIds: [curve.id] });
+    const roots = findZeros(curve.fn, xMin, xMax, samples, tolerance);
+    for (const x of roots) points.push({ x, y: 0, kind: "root", curveIds: [curve.id] });
+    // A maximum or minimum that is also a root ((x - 1)^2 at 1) is shown once, as the root.
+    for (const e of findExtrema(curve.fn, xMin, xMax, samples, tolerance)) {
+      if (!roots.some((r) => Math.abs(r - e.x) <= minGap)) {
+        points.push({ x: e.x, y: e.y, kind: e.kind, curveIds: [curve.id] });
+      }
     }
   }
 

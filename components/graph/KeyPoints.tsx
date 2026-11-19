@@ -22,13 +22,21 @@ const pointKey = (p: KeyPoint) => `${p.kind}:${p.curveIds.join(",")}:${p.x.toFix
 
 function describe(p: KeyPoint, names: Record<string, string>): string {
   const where = `(${formatCoordinate(p.x)}, ${formatCoordinate(p.y)})`;
-  return p.kind === "root"
-    ? `Root of ${names[p.curveIds[0]]} at ${where}`
-    : `${names[p.curveIds[0]]} and ${names[p.curveIds[1]]} intersect at ${where}`;
+  const name = names[p.curveIds[0]];
+  switch (p.kind) {
+    case "root":
+      return `Root of ${name} at ${where}`;
+    case "max":
+      return `Maximum of ${name} at ${where}`;
+    case "min":
+      return `Minimum of ${name} at ${where}`;
+    case "intersection":
+      return `${name} and ${names[p.curveIds[1]]} intersect at ${where}`;
+  }
 }
 
 /**
- * Marks roots and intersections of the visible curves, found in the plotting
+ * Marks roots, maxima, minima and intersections of the visible curves, found in the plotting
  * worker. Hovering a point shows its coordinates; clicking it pins a label.
  * Must be rendered inside <Mafs>.
  */

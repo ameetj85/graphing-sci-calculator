@@ -107,7 +107,12 @@ describe("2D curves in the worker", () => {
       angleMode: "rad",
       scope: snapshotScope(createScope()),
     });
-    expect(result.kind === "keyPoints" && result.points.map((p) => Number(p.x.toFixed(6)))).toEqual([-1, 1]);
+    // Roots at ±1 and the minimum at (0, -1).
+    expect(result.kind === "keyPoints" && result.points.map((p) => [p.kind, Number(p.x.toFixed(6))])).toEqual([
+      ["root", -1],
+      ["root", 1],
+      ["min", 0],
+    ]);
   });
 });
 
